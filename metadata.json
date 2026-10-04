@@ -1,0 +1,6 @@
+{
+  "name": "Skyblock Value Calculator",
+  "description": "Real-time Skyblock trading tool, item value calculator, live trade comparisons, friend system, and world chat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

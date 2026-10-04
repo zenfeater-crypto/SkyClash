@@ -1,0 +1,282 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User account profile with role, display name, and moderation state",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "normalizedUsername": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "profilePhoto": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "officer", "trusted", "user", "jmd"] },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "changeValues": { "type": "boolean" },
+            "banUnban": { "type": "boolean" },
+            "deleteChats": { "type": "boolean" },
+            "chooseTrusted": { "type": "boolean" }
+          }
+        },
+        "createdAt": { "type": "number" },
+        "bio": { "type": "string" },
+        "banned": { "type": "boolean" },
+        "isBanned": { "type": "boolean" },
+        "banType": { "type": "string", "enum": ["temporary", "permanent"] },
+        "bannedUntil": { "type": "number" },
+        "bannedBy": { "type": "string" },
+        "banReason": { "type": "string" },
+        "muted": { "type": "boolean" },
+        "isMuted": { "type": "boolean" },
+        "muteType": { "type": "string", "enum": ["temporary", "permanent"] },
+        "mutedUntil": { "type": "number" },
+        "mutedBy": { "type": "string" },
+        "muteReason": { "type": "string" },
+        "lastWorldChatAt": { "type": "number" },
+        "lastChatMessageNorm": { "type": "string" },
+        "sameMessageCount": { "type": "number" }
+      },
+      "required": ["uid", "username", "normalizedUsername", "role", "createdAt"]
+    },
+    "usernameReservation": {
+      "title": "UsernameReservation",
+      "description": "Unique username claim document for atomic collision prevention",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" }
+      },
+      "required": ["uid", "username"]
+    },
+    "skyblockItem": {
+      "title": "SkyblockItem",
+      "description": "Catalog item with value, demand, and metadata",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "normalizedName": { "type": "string" },
+        "category": { "type": "string" },
+        "value": { "type": "number" },
+        "demand": { "type": "string" },
+        "rarity": { "type": "string" },
+        "image": { "type": "string" },
+        "description": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "normalizedName", "category", "value", "demand", "rarity"]
+    },
+    "valueAuditLog": {
+      "title": "ValueAuditLog",
+      "description": "Audit record of any item value or demand change by staff",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemId": { "type": "string" },
+        "itemName": { "type": "string" },
+        "oldValue": { "type": "number" },
+        "newValue": { "type": "number" },
+        "oldDemand": { "type": "string" },
+        "newDemand": { "type": "string" },
+        "changedByUid": { "type": "string" },
+        "changedByUsername": { "type": "string" },
+        "changedByRole": { "type": "string", "enum": ["admin", "officer"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["itemId", "itemName", "oldValue", "newValue", "oldDemand", "newDemand", "changedByUid", "changedByUsername", "changedByRole", "timestamp"]
+    },
+    "reportItem": {
+      "title": "ReportItem",
+      "description": "Moderation report submitted strictly by verified Officers or Trusted users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reporterUid": { "type": "string" },
+        "reporterUsername": { "type": "string" },
+        "reporterRole": { "type": "string", "enum": ["officer", "trusted"] },
+        "reportedUid": { "type": "string" },
+        "reportedUsername": { "type": "string" },
+        "reportedRole": { "type": "string" },
+        "targetType": { "type": "string" },
+        "targetId": { "type": "string" },
+        "reason": { "type": "string" },
+        "evidence": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "reviewed", "resolved", "dismissed"] },
+        "actionTaken": { "type": "string" },
+        "reviewedByUid": { "type": "string" },
+        "reviewedByUsername": { "type": "string" },
+        "reviewedAt": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["reporterUid", "reporterUsername", "reporterRole", "reason", "status", "createdAt"]
+    },
+    "skyblockPet": {
+      "title": "SkyblockPet",
+      "description": "Skyblock pet with P5 through P10 tier valuations and trend",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "normalizedName": { "type": "string" },
+        "type": { "type": "string", "enum": ["Normal", "Rare"] },
+        "status": { "type": "string" },
+        "p5": { "type": "string" },
+        "p6": { "type": "string" },
+        "p7": { "type": "string" },
+        "p8": { "type": "string" },
+        "p9": { "type": "string" },
+        "p10": { "type": "string" },
+        "numericP5": { "type": "number" },
+        "numericP6": { "type": "number" },
+        "numericP7": { "type": "number" },
+        "numericP8": { "type": "number" },
+        "numericP9": { "type": "number" },
+        "numericP10": { "type": "number" },
+        "image": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["name", "type", "p5", "p6", "p7", "p8", "p9", "p10", "status", "updatedAt"]
+    },
+    "worldMessage": {
+      "title": "WorldMessage",
+      "description": "Public trade stream chat message",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "normalizedText": { "type": "string" },
+        "sameMessageCount": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["senderUid", "senderUsername", "text", "timestamp", "createdAt", "expiresAt"]
+    },
+    "tradePost": {
+      "title": "TradePost",
+      "description": "Public trade feed post comparing Your Offer and My Offer items and valuations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "posterUid": { "type": "string" },
+        "posterDisplayName": { "type": "string" },
+        "posterUsername": { "type": "string" },
+        "posterPhotoURL": { "type": "string" },
+        "posterRole": { "type": "string" },
+        "posterVerified": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "yourItems": { "type": "array" },
+        "myItems": { "type": "array" },
+        "yourTotal": { "type": "number" },
+        "myTotal": { "type": "number" },
+        "yourTotalDisplay": { "type": "string" },
+        "myTotalDisplay": { "type": "string" },
+        "difference": { "type": "number" },
+        "differenceDisplay": { "type": "string" },
+        "differencePercentage": { "type": "number" },
+        "status": { "type": "string", "enum": ["OPEN", "COMPLETED", "CANCELLED"] },
+        "note": { "type": "string" },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["posterUid", "posterUsername", "createdAt", "expiresAt", "status"]
+    },
+    "privateConversation": {
+      "title": "PrivateConversation",
+      "description": "Private direct conversation between two users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageTimestamp": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "privateMessage": {
+      "title": "PrivateMessage",
+      "description": "Individual message in private conversation subcollection",
+      "type": "object",
+      "properties": {
+        "senderUid": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["senderUid", "senderUsername", "text", "timestamp"]
+    },
+    "permissionAuditLog": {
+      "title": "PermissionAuditLog",
+      "description": "Immutable audit record of JMD permission changes by Owner Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "adminUid": { "type": "string" },
+        "adminUsername": { "type": "string" },
+        "jmdUid": { "type": "string" },
+        "jmdUsername": { "type": "string" },
+        "permissionChanged": { "type": "string" },
+        "oldState": { "type": "object" },
+        "newState": { "type": "object" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["adminUid", "adminUsername", "jmdUid", "jmdUsername", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User profiles and moderation records"
+    },
+    "/usernames/{username}": {
+      "schema": "usernameReservation",
+      "description": "Unique username registry"
+    },
+    "/items/{itemId}": {
+      "schema": "skyblockItem",
+      "description": "Skyblock item catalog and prices"
+    },
+    "/pets/{petId}": {
+      "schema": "skyblockPet",
+      "description": "Skyblock pet catalog and P5-P10 valuations"
+    },
+    "/trade_posts/{postId}": {
+      "schema": "tradePost",
+      "description": "Public trade feed posts"
+    },
+    "/valueAudit/{auditId}": {
+      "schema": "valueAuditLog",
+      "description": "Immutable audit records of price modifications"
+    },
+    "/permissionAudit/{auditId}": {
+      "schema": "permissionAuditLog",
+      "description": "Immutable audit records of JMD custom permission changes"
+    },
+    "/reports/{reportId}": {
+      "schema": "reportItem",
+      "description": "Moderation reports and recommendations"
+    },
+    "/worldMessages/{messageId}": {
+      "schema": "worldMessage",
+      "description": "Public chat messages"
+    },
+    "/conversations/{convId}": {
+      "schema": "privateConversation",
+      "description": "Private direct message thread"
+    },
+    "/conversations/{convId}/messages/{messageId}": {
+      "schema": "privateMessage",
+      "description": "Individual message in direct conversation thread"
+    }
+  }
+}

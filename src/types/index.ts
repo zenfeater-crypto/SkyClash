@@ -1,0 +1,319 @@
+export type ItemRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY' | 'MYTHIC' | 'DIVINE' | 'SPECIAL';
+
+export type ItemCategory = 'Sword' | 'Armour' | 'Pet' | 'Accessories / Items';
+
+export type PetType = 'Normal' | 'Rare';
+
+export type PetTier = 'P5' | 'P6' | 'P7' | 'P8' | 'P9' | 'P10';
+
+export interface SkyblockPet {
+  id: string;
+  name: string;
+  normalizedName: string;
+  type: PetType;
+  status: string; // e.g. "Stable", "Decreasing", "Increasing", "Stable + Decreasing", etc.
+  p5: string;
+  p6: string;
+  p7: string;
+  p8: string;
+  p9: string;
+  p10: string;
+  numericP5: number;
+  numericP6: number;
+  numericP7: number;
+  numericP8: number;
+  numericP9: number;
+  numericP10: number;
+  image?: string;
+  description?: string;
+  updatedAt: number;
+  updatedBy?: string;
+}
+
+export type DemandLevel = 'VERY LOW' | 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME';
+
+export interface SkyblockItem {
+  id: string;
+  name: string;
+  normalizedName: string;
+  category: ItemCategory;
+  status: string; // e.g. "Stable", "Decreasing", "Increasing", "Unstable", "Stable + Increasing", "Stable + Decreasing", "Decreasing + Stable", "Not specified"
+  // For Swords:
+  normalValue?: string;
+  rareValue?: string;
+  // For Armour:
+  fourPieceValue?: string;
+  fivePieceValue?: string;
+  // For Pets:
+  petType?: PetType;
+  p5?: string;
+  p6?: string;
+  p7?: string;
+  p8?: string;
+  p9?: string;
+  p10?: string;
+  petData?: SkyblockPet;
+  // For Accessories / Items:
+  displayValue?: string; // Exact range or value string (e.g. "100M - 120M" or "50M")
+  minimumValue?: number; // optional range min
+  maximumValue?: number; // optional range max
+  disabled?: boolean;
+  createdAt?: number;
+  // Numerical equivalents for sorting and trade calculations:
+  value: number; // primary numeric value in coins (Normal or 4/4 or P5 value or base value)
+  numericRareValue?: number; // for Rare sword calculations
+  numericFivePieceValue?: number; // for 5/5 armour calculations
+  demand?: DemandLevel;
+  rarity?: ItemRarity;
+  image: string;
+  description: string;
+  updatedAt: string | number;
+  tags?: string[];
+}
+
+export interface TradeItemSlot {
+  item: SkyblockItem;
+  quantity: number;
+  variant?: 'normal' | 'rare' | '4/4' | '5/5' | 'P5' | 'P6' | 'P7' | 'P8' | 'P9' | 'P10' | string;
+  unitValue?: number;
+  selectedDisplayValue?: string;
+  petData?: SkyblockPet;
+}
+
+export interface TradeRecord {
+  id: string;
+  userId: string;
+  yourItems: { itemId: string; name: string; value: number; quantity: number; image: string; rarity: ItemRarity }[];
+  theirItems: { itemId: string; name: string; value: number; quantity: number; image: string; rarity: ItemRarity }[];
+  yourTotal: number;
+  theirTotal: number;
+  difference: number;
+  percentageDiff: number;
+  timestamp: string | number;
+  note?: string;
+}
+
+export type UserRole = 'admin' | 'officer' | 'trusted' | 'user' | 'jmd';
+
+export interface JMDPermissions {
+  changeValues: boolean;
+  banUnban: boolean;
+  deleteChats: boolean;
+  chooseTrusted: boolean;
+}
+
+export interface PermissionAuditLog {
+  id: string;
+  adminUid: string;
+  adminUsername: string;
+  jmdUid: string;
+  jmdUsername: string;
+  permissionChanged: string;
+  oldState: Partial<JMDPermissions>;
+  newState: Partial<JMDPermissions>;
+  timestamp: number;
+}
+
+export type MembershipLevel = 'premium_lite' | 'premium' | 'vip';
+export type MembershipTitle = 'VANGUARD' | 'OVERLORD' | 'SUPREME';
+
+export interface UserMembership {
+  level: MembershipLevel | null;
+  title: MembershipTitle | null;
+  grantedAt: number;
+  grantedBy: string; // admin uid
+  grantedByUsername?: string;
+  status: 'active' | 'revoked' | 'expired';
+}
+
+export interface MembershipAuditLog {
+  id: string;
+  targetUid: string;
+  targetUsername: string;
+  previousMembership: MembershipLevel | null;
+  newMembership: MembershipLevel | null;
+  action: 'grant_premium_lite' | 'grant_premium' | 'grant_vip' | 'change_membership' | 'remove_membership';
+  adminUid: string;
+  adminUsername: string;
+  timestamp: number;
+}
+
+export interface UserProfile {
+  uid: string;
+  username: string; // @username: unique, lowercase a-z and 0-9 only, 3-20 chars
+  normalizedUsername: string;
+  name?: string; // Display Name: allows uppercase, lowercase, spaces, emojis
+  profilePhoto?: string; // Custom uploaded profile photo (data URL / storage URL)
+  email: string;
+  avatarUrl?: string; // fallback dicebear or photo
+  role: UserRole;
+  permissions?: JMDPermissions;
+  membership?: UserMembership | null;
+  createdAt: string | number;
+  bio?: string; // max 100 words
+  
+  // Moderation: Ban system
+  banned?: boolean;
+  isBanned?: boolean; // legacy alias
+  banType?: 'temporary' | 'permanent';
+  bannedUntil?: number | null; // timestamp ms
+  bannedBy?: string; // UID or username
+  banReason?: string;
+  bannedAt?: number;
+
+  // Moderation: Mute system
+  muted?: boolean;
+  isMuted?: boolean; // legacy alias
+  muteType?: 'temporary' | 'permanent';
+  mutedUntil?: number; // timestamp ms
+  mutedBy?: string;
+  muteReason?: string;
+
+  // Rate Limiting & Cooldowns
+  lastWorldChatAt?: number; // timestamp ms of last successful world message
+  lastChatMessageNorm?: string; // normalized message string for duplicate detection
+  sameMessageCount?: number; // consecutive identical message counter (max 2)
+}
+
+export interface FriendRequest {
+  id: string;
+  senderUid: string;
+  senderUsername: string;
+  senderAvatar?: string;
+  receiverUid: string;
+  receiverUsername: string;
+  status: 'pending' | 'accepted' | 'declined' | 'blocked';
+  createdAt: string | number;
+}
+
+export interface Friendship {
+  id: string;
+  users: string[]; // [uid1, uid2] sorted
+  usernames: Record<string, string>;
+  names?: Record<string, string>;
+  avatars: Record<string, string>;
+  roles?: Record<string, UserRole>;
+  createdAt: string | number;
+  lastMessage?: string;
+  lastMessageTimestamp?: string | number;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderUid: string;
+  senderUsername: string;
+  senderName?: string;
+  senderAvatar?: string;
+  senderRole?: UserRole;
+  senderMembership?: UserMembership | null;
+  senderMembershipLevel?: MembershipLevel | null;
+  text: string;
+  normalizedText?: string;
+  sameMessageCount?: number;
+  timestamp: string | number;
+  createdAt?: number;
+  expiresAt?: number;
+}
+
+export interface ReportItem {
+  id: string;
+  reporterUid: string;
+  reporterUsername: string;
+  reporterRole: UserRole;
+  reportedUid: string;
+  reportedUsername: string;
+  reportedRole?: UserRole;
+  targetType: 'user' | 'world_message' | 'private_message' | 'recommendation' | 'trade_post';
+  targetId: string;
+  targetContent?: string;
+  targetUsername?: string;
+  reason: string;
+  evidence?: string;
+  status: 'pending' | 'reviewed' | 'resolved' | 'dismissed';
+  actionTaken?: string;
+  reviewedByUid?: string;
+  reviewedByUsername?: string;
+  reviewedAt?: number;
+  createdAt: number;
+}
+
+export interface ValueAuditLog {
+  id: string;
+  itemId: string;
+  itemName: string;
+  oldValue: number;
+  newValue: number;
+  oldDemand: DemandLevel;
+  newDemand: DemandLevel;
+  changedByUid: string;
+  changedByUsername: string;
+  changedByRole: 'admin' | 'officer';
+  timestamp: number;
+}
+
+export type ModerationActionType = 
+  | 'USER_BANNED'
+  | 'USER_TEMP_BANNED'
+  | 'USER_UNBANNED'
+  | 'USER_MUTED'
+  | 'USER_UNMUTED'
+  | 'ROLE_CHANGED'
+  | 'VALUE_CHANGED';
+
+export interface ModerationHistoryItem {
+  id: string;
+  action: ModerationActionType | string;
+  targetUid: string;
+  targetUsername: string;
+  performedByUid: string;
+  performedByUsername: string;
+  performedByRole: UserRole;
+  adminUid?: string;
+  timestamp: number;
+  reason?: string;
+  previousRole?: UserRole;
+  newRole?: UserRole;
+  previousBanStatus?: string;
+  newBanStatus?: string;
+  details?: Record<string, any>;
+}
+
+export interface TradePostItem {
+  itemId: string;
+  name: string;
+  category: ItemCategory;
+  variant?: string;
+  quantity: number;
+  displayValue?: string;
+  unitValue?: number;
+  image?: string;
+  petTier?: PetTier;
+}
+
+export interface TradePost {
+  id: string;
+  posterUid: string;
+  posterDisplayName: string;
+  posterUsername: string;
+  posterPhotoURL: string;
+  posterRole: UserRole | string;
+  posterMembership?: UserMembership | null;
+  posterMembershipLevel?: MembershipLevel | null;
+  posterVerified?: boolean;
+  createdAt: number;
+  yourItems: TradePostItem[];
+  myItems: TradePostItem[];
+  yourTotal: number;
+  myTotal: number;
+  yourTotalDisplay: string;
+  myTotalDisplay: string;
+  difference: number;
+  differenceDisplay: string;
+  differencePercentage: number;
+  differenceDirection?: 'up' | 'down' | 'equal';
+  status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
+  note?: string;
+  expiresAt: number;
+}
+
+
