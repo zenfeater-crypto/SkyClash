@@ -13,7 +13,8 @@ import {
   LogOut,
   User as UserIcon,
   Calculator as CalculatorIcon,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Swords
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { RoleBadge } from './RoleBadge';
@@ -32,7 +33,8 @@ export type NavTab =
   | 'worldchat' 
   | 'friends' 
   | 'settings' 
-  | 'admin';
+  | 'admin'
+  | 'wars';
 
 interface NavigationProps {
   currentTab: NavTab;
@@ -138,6 +140,18 @@ export const Navbar: React.FC<NavigationProps> = ({ currentTab, onTabChange, onO
           >
             <Users className="w-3.5 h-3.5" />
             <span>Friends</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('wars')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              currentTab === 'wars'
+                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/20'
+                : 'text-amber-400 hover:text-amber-300 hover:bg-amber-950/30'
+            }`}
+          >
+            <Swords className="w-3.5 h-3.5 text-amber-400" />
+            <span>Wars</span>
           </button>
 
           {isStaff && (
@@ -287,6 +301,16 @@ export const MobileBottomNav: React.FC<NavigationProps> = ({ currentTab, onTabCh
         >
           <MessageSquare className="w-4 h-4" />
           <span>Chat</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange('wars')}
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-[10px] font-bold transition ${
+            currentTab === 'wars' ? 'text-amber-400' : 'text-slate-400 hover:text-amber-300'
+          }`}
+        >
+          <Swords className="w-4 h-4 text-amber-400" />
+          <span>Wars</span>
         </button>
 
         <button

@@ -47,6 +47,8 @@ import { TradePost, TradePostItem, UserRole } from '../types';
 import { formatCoins, formatTimeAgo } from '../lib/formatters';
 import { parseCoinStringToNumber } from '../lib/itemHelpers';
 import { RoleBadge } from '../components/RoleBadge';
+import { MembershipBadge } from '../components/MembershipBadge';
+import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { stripSpoofedRoleTags } from '../lib/validation';
 import { UserProfileModal } from '../components/UserProfileModal';
 
@@ -581,16 +583,15 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
                     className="flex items-center gap-3 cursor-pointer group/user"
                     title="View Trader Profile"
                   >
-                    <div className="relative">
-                      <img
-                        src={posterAvatar}
-                        alt={posterUsername}
-                        className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-800 object-cover group-hover/user:border-cyan-400 transition"
-                      />
-                      <div className="absolute -bottom-1 -right-1">
-                        <RoleBadge role={post.posterRole} size="xs" />
-                      </div>
-                    </div>
+                    <CircularProfileAvatar
+                      src={posterAvatar}
+                      alt={posterUsername}
+                      role={post.posterRole}
+                      membership={post.posterMembership}
+                      membershipLevel={post.posterMembershipLevel || post.posterMembership?.level}
+                      isAdmin={post.posterRole === 'admin'}
+                      size="md"
+                    />
 
                     <div>
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -600,6 +601,10 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
                         <span className="text-xs text-cyan-400/90 font-mono font-normal">
                           @{posterUsername}
                         </span>
+                        <RoleBadge role={post.posterRole} size="xs" />
+                        {(post.posterMembershipLevel || post.posterMembership?.level) && (
+                          <MembershipBadge level={post.posterMembershipLevel || post.posterMembership?.level} size="xs" />
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono mt-0.5 flex-wrap">
                         <span className="flex items-center gap-1">

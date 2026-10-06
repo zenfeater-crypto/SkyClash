@@ -11,7 +11,8 @@ import {
   ArrowRight,
   Flame,
   Search,
-  Sparkles
+  Sparkles,
+  Swords
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useItems } from '../context/ItemsContext';
@@ -23,14 +24,17 @@ import { RoleBadge } from '../components/RoleBadge';
 import { MembershipBadge } from '../components/MembershipBadge';
 import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { CommunityAdBanner } from '../components/CommunityAdBanner';
+import { HomeWarsBanner } from '../components/HomeWarsBanner';
+import { WarsCategory } from '../types';
 
 interface HomeViewProps {
   onNavigate: (tab: NavTab) => void;
   onSelectItem: (itemId: string) => void;
   onOpenAuth: () => void;
+  onEnterWars?: (category?: WarsCategory) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, onOpenAuth }) => {
+export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, onOpenAuth, onEnterWars }) => {
   const { currentUser, userProfile } = useAuth();
   const { items } = useItems();
   const { favorites, tradeHistory } = useUserData();
@@ -43,6 +47,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
   const topValueItems = [...items]
     .sort((a, b) => b.value - a.value)
     .slice(0, 4);
+
+  const handleOpenWars = (cat?: WarsCategory) => {
+    if (onEnterWars) {
+      onEnterWars(cat);
+    } else {
+      onNavigate('wars');
+    }
+  };
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in duration-300">
@@ -78,6 +90,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
             </button>
 
             <button
+              onClick={() => handleOpenWars('skyblock')}
+              className="py-3 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-sm shadow-xl shadow-amber-500/20 flex items-center gap-2 active:scale-95 transition"
+            >
+              <Swords className="w-4 h-4" />
+              <span>Enter Wars Arena</span>
+            </button>
+
+            <button
               onClick={() => onNavigate('tradefeed')}
               className="py-3 px-6 rounded-2xl bg-slate-800/80 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-slate-200 font-semibold text-sm flex items-center gap-2 transition"
             >
@@ -105,6 +125,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
                 size="md"
                 role={userProfile.role}
                 membership={userProfile.membership}
+                profileFrameId={userProfile.profileFrameId}
                 isAdmin={userProfile.role === 'admin'}
               />
               <div>
@@ -138,6 +159,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
         )}
       </div>
 
+      {/* LARGE PROMINENT WARS SECTION ON HOME */}
+      <HomeWarsBanner onEnterWars={handleOpenWars} />
+
       {/* Community Partner / Ad Banner (Hidden for Ad-Free Members: Vanguard, Overlord, Supreme, Owner Admin) */}
       <CommunityAdBanner />
 
@@ -149,7 +173,18 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
           </h2>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <button
+            onClick={() => handleOpenWars('skyblock')}
+            className="p-4 rounded-2xl bg-slate-900/80 border border-amber-500/40 hover:border-amber-400 hover:bg-slate-850 text-left transition group shadow-md shadow-amber-500/5"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mb-3 group-hover:scale-105 transition">
+              <Swords className="w-5 h-5" />
+            </div>
+            <div className="font-bold text-amber-300 text-sm">Wars Arena</div>
+            <div className="text-[11px] text-slate-400 mt-1">Skyblock & Bedwars</div>
+          </button>
+
           <button
             onClick={() => onNavigate('calculator')}
             className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 hover:border-cyan-500/40 hover:bg-slate-850 text-left transition group"

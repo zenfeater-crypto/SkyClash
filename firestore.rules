@@ -258,6 +258,26 @@ service cloud.firestore {
       allow update, delete: if isStaff() || (canCallerDeleteChats() && (!('senderRole' in resource.data) || resource.data.senderRole != 'admin') && (!('senderUsername' in resource.data) || resource.data.senderUsername != 'strike'));
     }
 
+    // WORLD CHAT GROUPS
+    match /worldChatGroups/{groupId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || (isSignedIn() && request.resource.data.isAutoCreated == true);
+      allow update: if isSignedIn() && (!isUserBanned(request.auth.uid) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // WORLD CHAT PRESENCE (Active player tracking for <= 75 active users capacity)
+    match /worldChatPresence/{presenceId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.auth.uid == presenceId;
+    }
+
+    // WORLD CHAT SETTINGS (Auto Groups toggle, managed by Owner Admin)
+    match /worldChatSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
     // TRADE POSTS (Community Trade Feed - Restricted to active signed-in users)
     match /trade_posts/{postId} {
       allow read: if isSignedIn();
@@ -359,5 +379,103 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.blockerUid == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.blockerUid == request.auth.uid;
     }
+
+    // SKYBLOCK WARS & BEDWARS - GANGS
+    match /wars_gangs/{gangId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() && 
+        resource.data.leaderUid == request.auth.uid && 
+        request.resource.data.leaderUid == resource.data.leaderUid
+      ) || (
+        // Allow a normal member to leave the gang by removing themselves
+        isSignedIn() &&
+        resource.data.leaderUid != request.auth.uid &&
+        resource.data.memberUids.hasAny([request.auth.uid]) &&
+        !request.resource.data.memberUids.hasAny([request.auth.uid]) &&
+        request.resource.data.leaderUid == resource.data.leaderUid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members', 'memberUids', 'updatedAt'])
+      );
+
+      // GANG CHAT SUBCOLLECTION (30-Minute Ephemeral Messages)
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() &&
+          !isUserBanned(request.auth.uid) &&
+          !isUserMuted(request.auth.uid) &&
+          request.resource.data.senderUid == request.auth.uid;
+        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.senderUid == request.auth.uid);
+      }
+    }
+
+    // GANG INVITATIONS
+    match /gangInvitations/{inviteId} {
+      allow read: if isSignedIn() && (
+        resource.data.receiverUid == request.auth.uid || 
+        resource.data.senderUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() &&
+        !isUserBanned(request.auth.uid) &&
+        !isUserMuted(request.auth.uid) &&
+        request.resource.data.senderUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.receiverUid == request.auth.uid || 
+        resource.data.senderUid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // SKYBLOCK WARS - ANNOUNCEMENTS (Admin Only)
+    match /wars_announcements/{announcementId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // SKYBLOCK WARS - LEADERBOARD (Admin Only)
+    match /wars_leaderboard/{entryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // SKYBLOCK WARS - MATCHINGS
+    match /wars_matchings/{matchingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        !isUserBanned(request.auth.uid) &&
+        request.resource.data.leaderUid == request.auth.uid;
+      allow update, delete: if isAdmin() || (
+        isSignedIn() && (
+          resource.data.leaderUid == request.auth.uid ||
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'challengerGangId', 'challengerGangName'])
+        )
+      );
+    }
+
+    // SKYBLOCK WARS - LIVE WARS (Admin Only)
+    match /wars_live/{liveMatchId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // FRAME COLLECTION (Global registry of Profile Frames & Text Frames - Owner Admin only writes, all signed-in read)
+    match /frameCollection/{frameId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // FRAME AUDIT LOGS (Immutable Owner Admin Records for Frame Assignments)
+    match /frameAudit/{auditId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminUid == request.auth.uid;
+      allow update, delete: if false; // Audit logs can never be manipulated
+    }
+
+    // ADMIN FAVORITES (Owner Admin favorite frames)
+    match /adminFavorites/{favId} {
+      allow read, write: if isAdmin();
+    }
   }
 }
+

@@ -32,13 +32,23 @@ import { formatTimeAgo } from '../lib/formatters';
 import { RoleBadge } from '../components/RoleBadge';
 import { stripSpoofedRoleTags } from '../lib/validation';
 import { BackButton } from '../components/BackButton';
+import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
+import { MessageTextFrame } from '../components/MessageTextFrame';
 
 import { formatRemainingTime } from '../lib/moderation';
-import { UserRole } from '../types';
+import { UserRole, UserMembership } from '../types';
 
 interface PrivateChatViewProps {
   friendshipId: string;
-  partnerProfile: { uid: string; username: string; name?: string; avatarUrl?: string; role?: UserRole };
+  partnerProfile: { 
+    uid: string; 
+    username: string; 
+    name?: string; 
+    avatarUrl?: string; 
+    profilePhoto?: string;
+    role?: UserRole;
+    membership?: UserMembership | null;
+  };
   onBack: () => void;
   onOpenReportModal: (targetType: 'private_message' | 'user', targetId: string, username: string) => void;
 }
@@ -147,13 +157,14 @@ export const PrivateChatView: React.FC<PrivateChatViewProps> = ({
         <div className="flex items-center gap-3">
           <BackButton onClick={onBack} label="Back" />
 
-          <img
-            src={
-              partnerProfile.avatarUrl ||
-              `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${partnerProfile.username}`
-            }
+          <CircularProfileAvatar
+            src={partnerProfile.profilePhoto || partnerProfile.avatarUrl}
             alt={partnerProfile.username}
-            className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+            role={partnerProfile.role}
+            membership={partnerProfile.membership}
+            membershipLevel={partnerProfile.membership?.level}
+            isAdmin={partnerProfile.role === 'admin'}
+            size="md"
           />
 
           <div>
@@ -213,22 +224,36 @@ export const PrivateChatView: React.FC<PrivateChatViewProps> = ({
         ) : (
           messages.map((msg) => {
             const isMe = currentUser?.uid === msg.senderUid;
+            const senderRole = isMe ? userProfile?.role : partnerProfile.role;
+            const senderMembership = isMe ? userProfile?.membership : partnerProfile.membership;
+            const senderLevel = senderMembership?.level;
+            const senderPhoto = isMe ? (userProfile?.profilePhoto || userProfile?.avatarUrl) : (partnerProfile.profilePhoto || partnerProfile.avatarUrl);
+            const senderName = isMe ? (userProfile?.username || 'me') : partnerProfile.username;
 
             return (
               <div
                 key={msg.id}
                 className={`flex gap-3 items-end ${isMe ? 'flex-row-reverse' : ''}`}
               >
+                <CircularProfileAvatar
+                  src={senderPhoto}
+                  alt={senderName}
+                  role={senderRole}
+                  membership={senderMembership}
+                  membershipLevel={senderLevel}
+                  isAdmin={senderRole === 'admin'}
+                  size="xs"
+                  className="mb-1"
+                />
+
                 <div className={`max-w-[85%] sm:max-w-md ${isMe ? 'items-end' : 'items-start'}`}>
-                  <div
-                    className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed break-words shadow-md ${
-                      isMe
-                        ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-br-none'
-                        : 'bg-slate-950 border border-slate-800 text-slate-200 rounded-bl-none'
-                    }`}
-                  >
-                    {msg.text}
-                  </div>
+                  <MessageTextFrame
+                    role={senderRole}
+                    membershipLevel={senderLevel}
+                    isOwnerAdmin={senderRole === 'admin'}
+                    isMe={isMe}
+                    text={msg.text}
+                  />
                   <div className={`text-[10px] text-slate-500 font-mono mt-1 ${isMe ? 'text-right' : ''}`}>
                     {formatTimeAgo(msg.timestamp)}
                   </div>

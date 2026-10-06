@@ -72,10 +72,13 @@ import { formatCoins, formatTimeAgo, formatJoinedDate } from '../lib/formatters'
 import { RoleBadge } from '../components/RoleBadge';
 import { MembershipBadge } from '../components/MembershipBadge';
 import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
+import { MessageTextFrame } from '../components/MessageTextFrame';
+import { getFrameAssets, setFrameAssets, DEFAULT_FRAME_ASSETS } from '../lib/frameAssets';
 import { UserDisplay } from '../components/UserDisplay';
 import { formatRemainingTime, isUserBanned, isUserMuted, getDetailedBanStatus } from '../lib/moderation';
 import { sanitizeForFirestore, stripSpoofedRoleTags } from '../lib/validation';
 import { BackButton } from '../components/BackButton';
+import { FrameCollectionAdminView } from '../components/frames/FrameCollectionAdminView';
 
 interface AdminPanelViewProps {
   onBack?: () => void;
@@ -105,7 +108,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
   const { items, addItem, updateItem, deleteItem, seedInitialDatabase } = useItems();
 
   // Admin tabs vs Officer vs JMD tabs
-  type AdminTab = 'dashboard' | 'jmd_permissions' | 'memberships' | 'users' | 'reports' | 'moderation' | 'roles' | 'values' | 'history';
+  type AdminTab = 'dashboard' | 'jmd_permissions' | 'memberships' | 'frame_collection' | 'users' | 'reports' | 'moderation' | 'roles' | 'values' | 'history';
   const [activeTab, setActiveTab] = useState<AdminTab>(
     isAdmin 
       ? 'dashboard' 
@@ -131,6 +134,18 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
     action: 'grant_premium_lite',
   });
   const [savingMembership, setSavingMembership] = useState(false);
+  const [frameAssetsState, setLocalFrameAssetsState] = useState(getFrameAssets());
+  const [showFrameConfig, setShowFrameConfig] = useState(false);
+  const [customFrameUrls, setCustomFrameUrls] = useState({
+    adminProfile: '',
+    adminMessage: '',
+    supremeProfile: '',
+    supremeMessage: '',
+    overlordProfile: '',
+    overlordMessage: '',
+    vanguardProfile: '',
+    vanguardMessage: '',
+  });
 
   // JMD Permissions State (Owner Admin only)
   const [jmdSearchTerm, setJmdSearchTerm] = useState('');
@@ -1118,6 +1133,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
           </button>
         )}
 
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('frame_collection')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeTab === 'frame_collection'
+                ? 'bg-gradient-to-r from-amber-500/20 via-cyan-500/20 to-purple-500/20 text-white border border-amber-400/60 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/30'
+                : 'text-amber-300/80 hover:text-amber-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Frame Collection</span>
+          </button>
+        )}
+
         {(isAdmin || (userProfile?.role === 'jmd' && (!!userProfile?.permissions?.banUnban || !!userProfile?.permissions?.chooseTrusted))) && (
           <button
             onClick={() => setActiveTab('users')}
@@ -1432,10 +1461,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={user.profilePhoto || user.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${user.username}`}
+                          <CircularProfileAvatar
+                            src={user.profilePhoto || user.avatarUrl}
                             alt={user.username}
-                            className="w-7 h-7 rounded-lg bg-slate-900 border border-slate-800 object-cover shrink-0"
+                            role={user.role}
+                            membership={user.membership}
+                            isAdmin={user.role === 'admin'}
+                            size="xs"
                           />
                           <div className="truncate text-xs">
                             <div className="font-bold truncate">{user.name || user.username}</div>
@@ -1456,10 +1488,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
               {/* Selected User Header */}
               <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
                 <div className="flex items-center gap-3.5">
-                  <img
-                    src={selectedJmdUser.profilePhoto || selectedJmdUser.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${selectedJmdUser.username}`}
+                  <CircularProfileAvatar
+                    src={selectedJmdUser.profilePhoto || selectedJmdUser.avatarUrl}
                     alt={selectedJmdUser.username}
-                    className="w-12 h-12 rounded-xl bg-slate-800 border-2 border-purple-500/50 object-cover"
+                    role={selectedJmdUser.role}
+                    membership={selectedJmdUser.membership}
+                    isAdmin={selectedJmdUser.role === 'admin'}
+                    size="lg"
                   />
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1720,6 +1755,289 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
             </form>
           </div>
 
+          {/* Official Tier Frames & Message Text Frames Gallery */}
+          <div className="p-6 rounded-3xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-extrabold text-white uppercase font-mono flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                  <span>Official Profile & Message Text Frames (Active Tiers)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Live preview of the 4 active visual tiers in World Chat, Private Chat, User Profiles, and Trade Feed.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowFrameConfig(!showFrameConfig)}
+                className="py-1.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-mono text-cyan-300 border border-slate-700 flex items-center gap-1.5 transition"
+              >
+                <span>{showFrameConfig ? 'Hide URL Config' : 'Configure Custom Asset URLs'}</span>
+              </button>
+            </div>
+
+            {/* Live 4-Tier Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 1. OWNER ADMIN */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-900 border-2 border-amber-500/60 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-500 text-slate-950 uppercase font-mono">
+                      ADMIN TIER
+                    </span>
+                    <span className="text-xs font-bold text-white">Owner Admin (Strike)</span>
+                  </div>
+                  <span className="text-[10px] text-amber-300 font-mono">Winged Gold/Black Frame</span>
+                </div>
+
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="flex flex-col items-center">
+                    <CircularProfileAvatar
+                      src={userProfile?.profilePhoto || userProfile?.avatarUrl}
+                      alt="Admin Strike"
+                      role="admin"
+                      isAdmin={true}
+                      size="xl"
+                    />
+                    <span className="text-[10px] text-amber-400 font-mono mt-2">Winged Frame</span>
+                  </div>
+
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <span className="text-[10px] text-slate-400 font-mono block">Text Message Frame:</span>
+                    <MessageTextFrame
+                      role="admin"
+                      isOwnerAdmin={true}
+                      text="Owner Admin: Official Skyblock trading rules & gold/black message frame active."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. SUPREME (VIP Members) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-950/40 via-slate-950 to-slate-900 border border-purple-500/50 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MembershipBadge level="vip" title="SUPREME" size="xs" />
+                    <span className="text-xs font-bold text-white">VIP Members Tier</span>
+                  </div>
+                  <span className="text-[10px] text-purple-300 font-mono">Purple Radiant Aura</span>
+                </div>
+
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="flex flex-col items-center">
+                    <CircularProfileAvatar
+                      alt="Supreme User"
+                      membership="vip"
+                      size="xl"
+                    />
+                    <span className="text-[10px] text-purple-400 font-mono mt-2">Purple Frame</span>
+                  </div>
+
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <span className="text-[10px] text-slate-400 font-mono block">Text Message Frame:</span>
+                    <MessageTextFrame
+                      membershipLevel="vip"
+                      text="SUPREME: VIP Dark-purple crystal aura and radiant chat styling."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. OVERLORD (Premium) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/30 via-slate-950 to-slate-900 border border-cyan-500/40 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MembershipBadge level="premium" title="OVERLORD" size="xs" />
+                    <span className="text-xs font-bold text-white">Premium Tier</span>
+                  </div>
+                  <span className="text-[10px] text-cyan-300 font-mono">Diamond Shine</span>
+                </div>
+
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="flex flex-col items-center">
+                    <CircularProfileAvatar
+                      alt="Overlord User"
+                      membership="premium"
+                      size="xl"
+                    />
+                    <span className="text-[10px] text-cyan-400 font-mono mt-2">Diamond Frame</span>
+                  </div>
+
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <span className="text-[10px] text-slate-400 font-mono block">Text Message Frame:</span>
+                    <MessageTextFrame
+                      membershipLevel="premium"
+                      text="OVERLORD: Diamond metallic circular frame and shiny message styling."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. VANGUARD (Premium Lite) */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-950 to-slate-900 border border-amber-500/40 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MembershipBadge level="premium_lite" title="VANGUARD" size="xs" />
+                    <span className="text-xs font-bold text-white">Premium Lite Tier</span>
+                  </div>
+                  <span className="text-[10px] text-amber-300 font-mono">Golden Gemstone</span>
+                </div>
+
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="flex flex-col items-center">
+                    <CircularProfileAvatar
+                      alt="Vanguard User"
+                      membership="premium_lite"
+                      size="xl"
+                    />
+                    <span className="text-[10px] text-amber-400 font-mono mt-2">Golden Frame</span>
+                  </div>
+
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <span className="text-[10px] text-slate-400 font-mono block">Text Message Frame:</span>
+                    <MessageTextFrame
+                      membershipLevel="premium_lite"
+                      text="VANGUARD: Golden circular frame and warm gold text message styling."
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional Custom Asset URLs Configurator Accordion */}
+            {showFrameConfig && (
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 pt-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white font-mono uppercase">
+                    Host & Link Custom Frame Image URLs
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrameAssets(DEFAULT_FRAME_ASSETS);
+                      setLocalFrameAssetsState(getFrameAssets());
+                      setStatusMessage('Successfully reset frame assets to official defaults.');
+                    }}
+                    className="text-xs text-rose-400 hover:underline font-mono"
+                  >
+                    Reset to Official Defaults
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  If you host high-resolution custom PNG/WebP frame files on Discord, Imgur, or cloud storage, paste their direct URLs below and click "Apply Custom Assets".
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="text-[10px] font-mono text-amber-400 block mb-1">Admin Profile Frame URL (Winged)</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.adminProfile}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, adminProfile: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-amber-400 block mb-1">Admin Message Text Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.adminMessage}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, adminMessage: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-purple-400 block mb-1">Supreme Profile Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.supremeProfile}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, supremeProfile: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-purple-400 block mb-1">Supreme Message Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.supremeMessage}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, supremeMessage: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-cyan-400 block mb-1">Overlord Profile Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.overlordProfile}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, overlordProfile: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-cyan-400 block mb-1">Overlord Message Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.overlordMessage}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, overlordMessage: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-amber-300 block mb-1">Vanguard Profile Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.vanguardProfile}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, vanguardProfile: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-mono text-amber-300 block mb-1">Vanguard Message Frame URL</label>
+                    <input
+                      type="text"
+                      placeholder="https://... (or leave blank for official)"
+                      value={customFrameUrls.vanguardMessage}
+                      onChange={(e) => setCustomFrameUrls(prev => ({ ...prev, vanguardMessage: e.target.value }))}
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-white text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 text-right">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updates: any = {};
+                      if (customFrameUrls.adminProfile) updates.admin = { ...updates.admin, profileFrame: customFrameUrls.adminProfile };
+                      if (customFrameUrls.adminMessage) updates.admin = { ...updates.admin, messageFrame: customFrameUrls.adminMessage };
+                      if (customFrameUrls.supremeProfile) updates.supreme = { ...updates.supreme, profileFrame: customFrameUrls.supremeProfile };
+                      if (customFrameUrls.supremeMessage) updates.supreme = { ...updates.supreme, messageFrame: customFrameUrls.supremeMessage };
+                      if (customFrameUrls.overlordProfile) updates.overlord = { ...updates.overlord, profileFrame: customFrameUrls.overlordProfile };
+                      if (customFrameUrls.overlordMessage) updates.overlord = { ...updates.overlord, messageFrame: customFrameUrls.overlordMessage };
+                      if (customFrameUrls.vanguardProfile) updates.vanguard = { ...updates.vanguard, profileFrame: customFrameUrls.vanguardProfile };
+                      if (customFrameUrls.vanguardMessage) updates.vanguard = { ...updates.vanguard, messageFrame: customFrameUrls.vanguardMessage };
+
+                      setFrameAssets(updates);
+                      setLocalFrameAssetsState(getFrameAssets());
+                      setStatusMessage('Custom frame assets applied in real time.');
+                    }}
+                    className="py-2 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
+                  >
+                    Apply Custom Assets
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* User Membership Directory */}
           <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
@@ -1935,6 +2253,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
             )}
           </div>
         </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION 1.8: FRAME COLLECTION SYSTEM (OWNER ADMIN ONLY)       */}
+      {/* ============================================================ */}
+      {isAdmin && activeTab === 'frame_collection' && (
+        <FrameCollectionAdminView />
       )}
 
       {/* ============================================================ */}
@@ -2446,10 +2771,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                 {officerUsers.map((officer) => (
                   <div key={officer.uid} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={officer.profilePhoto || officer.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${officer.username}`}
+                      <CircularProfileAvatar
+                        src={officer.profilePhoto || officer.avatarUrl}
                         alt={officer.username}
-                        className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+                        role="officer"
+                        size="md"
                       />
                       <div>
                         <div className="flex items-center gap-2">
@@ -2496,10 +2822,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                 {trustedUsers.map((trusted) => (
                   <div key={trusted.uid} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <img
-                        src={trusted.profilePhoto || trusted.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${trusted.username}`}
+                      <CircularProfileAvatar
+                        src={trusted.profilePhoto || trusted.avatarUrl}
                         alt={trusted.username}
-                        className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+                        role="trusted"
+                        size="md"
                       />
                       <div>
                         <div className="flex items-center gap-2">
@@ -3042,10 +3369,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
             </div>
 
             <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center gap-3">
-              <img
-                src={selectedJmdUser.profilePhoto || selectedJmdUser.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${selectedJmdUser.username}`}
+              <CircularProfileAvatar
+                src={selectedJmdUser.profilePhoto || selectedJmdUser.avatarUrl}
                 alt={selectedJmdUser.username}
-                className="w-11 h-11 rounded-xl bg-slate-800 border border-purple-500/40 object-cover"
+                role={selectedJmdUser.role}
+                membership={selectedJmdUser.membership}
+                isAdmin={selectedJmdUser.role === 'admin'}
+                size="md"
               />
               <div className="truncate flex-1">
                 <div className="flex items-center gap-2">

@@ -231,6 +231,176 @@
         "timestamp": { "type": "number" }
       },
       "required": ["adminUid", "adminUsername", "jmdUid", "jmdUsername", "timestamp"]
+    },
+    "warsGang": {
+      "title": "WarsGang",
+      "description": "Skyblock Wars Gang community record managed by Admin and Gang Leader",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "tag": { "type": "string" },
+        "iconUrl": { "type": "string" },
+        "leaderUid": { "type": "string" },
+        "leaderUsername": { "type": "string" },
+        "members": { "type": "array" },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "recruiting", "archived"] },
+        "bio": { "type": "string" },
+        "stats": { "type": "object" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "name", "leaderUid", "leaderUsername", "createdAt", "status"]
+    },
+    "warsGangMessage": {
+      "title": "WarsGangMessage",
+      "description": "Private ephemeral gang message expiring in 30 minutes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gangId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "senderRole": { "type": "string" },
+        "senderMembership": { "type": "object" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" },
+        "isPinned": { "type": "boolean" }
+      },
+      "required": ["id", "gangId", "senderUid", "senderUsername", "text", "createdAt", "expiresAt"]
+    },
+    "warsAnnouncement": {
+      "title": "WarsAnnouncement",
+      "description": "Official Admin announcements for Skyblock Wars",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "isImportant": { "type": "boolean" },
+        "createdByUid": { "type": "string" },
+        "createdByUsername": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "title", "content", "createdByUid", "createdAt"]
+    },
+    "warsLeaderboardEntry": {
+      "title": "WarsLeaderboardEntry",
+      "description": "Admin-controlled ranking entry for Skyblock Wars Leaderboard",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "rank": { "type": "number" },
+        "gangId": { "type": "string" },
+        "gangName": { "type": "string" },
+        "gangTag": { "type": "string" },
+        "gangIcon": { "type": "string" },
+        "score": { "type": "string" },
+        "notes": { "type": "string" },
+        "order": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "rank", "gangName", "order"]
+    },
+    "warsMatching": {
+      "title": "WarsMatching",
+      "description": "Matchings and war feed challenges posted by gang leaders",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gangId": { "type": "string" },
+        "gangName": { "type": "string" },
+        "gangTag": { "type": "string" },
+        "leaderUid": { "type": "string" },
+        "leaderUsername": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "format": { "type": "string" },
+        "scheduledTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "matched", "closed"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "gangId", "gangName", "leaderUid", "title", "status", "createdAt"]
+    },
+    "warsLiveMatch": {
+      "title": "WarsLiveMatch",
+      "description": "Live War matches and real-time scoreboards managed by Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "gang1": { "type": "object" },
+        "gang2": { "type": "object" },
+        "status": { "type": "string", "enum": ["upcoming", "live", "completed"] },
+        "roundInfo": { "type": "string" },
+        "streamUrl": { "type": "string" },
+        "notes": { "type": "string" },
+        "winnerId": { "type": "string" },
+        "winnerName": { "type": "string" },
+        "liveUpdates": { "type": "array" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["id", "title", "status", "gang1", "gang2", "createdAt"]
+    },
+    "gangInvitation": {
+      "title": "GangInvitation",
+      "description": "Invitation to join a Skyblock or Bedwars Wars Gang",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gangId": { "type": "string" },
+        "gangName": { "type": "string" },
+        "gameType": { "type": "string", "enum": ["skyblock", "bedwars"] },
+        "senderUid": { "type": "string" },
+        "senderUsername": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "receiverUsername": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "gangId", "gangName", "gameType", "senderUid", "receiverUid", "status", "createdAt"]
+    },
+    "frameItem": {
+      "title": "FrameItem",
+      "description": "Visual Profile Frame or Text Frame item definition in Frame Collection",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["profile", "text"] },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "assetUrl": { "type": "string" },
+        "previewUrl": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "type", "name", "category", "assetUrl", "createdAt", "isActive"]
+    },
+    "frameAuditLog": {
+      "title": "FrameAuditLog",
+      "description": "Immutable audit record of frame assignment, replacement, or removal by Owner Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "action": { "type": "string" },
+        "targetUserUid": { "type": "string" },
+        "targetUsername": { "type": "string" },
+        "frameId": { "type": "string" },
+        "frameType": { "type": "string" },
+        "previousFrameId": { "type": "string" },
+        "adminUid": { "type": "string" },
+        "adminUsername": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["action", "targetUserUid", "targetUsername", "adminUid", "adminUsername", "timestamp"]
     }
   },
   "firestore": {
@@ -277,6 +447,42 @@
     "/conversations/{convId}/messages/{messageId}": {
       "schema": "privateMessage",
       "description": "Individual message in direct conversation thread"
+    },
+    "/wars_gangs/{gangId}": {
+      "schema": "warsGang",
+      "description": "Skyblock Wars Gang registry"
+    },
+    "/wars_gangs/{gangId}/messages/{messageId}": {
+      "schema": "warsGangMessage",
+      "description": "Private ephemeral gang chat messages (30 min auto-expiration)"
+    },
+    "/wars_announcements/{announcementId}": {
+      "schema": "warsAnnouncement",
+      "description": "Admin announcements for Skyblock Wars"
+    },
+    "/wars_leaderboard/{entryId}": {
+      "schema": "warsLeaderboardEntry",
+      "description": "Admin-controlled ranking leaderboard"
+    },
+    "/wars_matchings/{matchingId}": {
+      "schema": "warsMatching",
+      "description": "War challenges and match feed"
+    },
+    "/wars_live/{liveMatchId}": {
+      "schema": "warsLiveMatch",
+      "description": "Live Wars match status and scoreboard"
+    },
+    "/gangInvitations/{inviteId}": {
+      "schema": "gangInvitation",
+      "description": "Invitations sent to friends to join a Wars Gang"
+    },
+    "/frameCollection/{frameId}": {
+      "schema": "frameItem",
+      "description": "Global catalog of Profile Frames and Text Frames"
+    },
+    "/frameAudit/{auditId}": {
+      "schema": "frameAuditLog",
+      "description": "Audit records of Owner Admin frame assignments"
     }
   }
 }

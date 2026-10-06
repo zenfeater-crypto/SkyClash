@@ -20,7 +20,8 @@ import { FriendsView } from './views/FriendsView';
 import { PrivateChatView } from './views/PrivateChatView';
 import { SettingsView } from './views/SettingsView';
 import { AdminPanelView } from './views/AdminPanelView';
-import { TradeItemSlot, SkyblockItem, UserRole } from './types';
+import { WarsView } from './views/WarsView';
+import { TradeItemSlot, SkyblockItem, UserRole, WarsCategory } from './types';
 import { BanNoticeModal } from './components/BanNoticeModal';
 import { parseCoinStringToNumber } from './lib/itemHelpers';
 import { formatCoins } from './lib/formatters';
@@ -52,6 +53,9 @@ function AppContent() {
     friendshipId: string;
     partnerProfile: { uid: string; username: string; name?: string; avatarUrl?: string; role?: UserRole };
   } | null>(null);
+
+  // Wars Category state (skyblock vs bedwars)
+  const [warsCategory, setWarsCategory] = useState<WarsCategory>('skyblock');
 
   // Report modal state
   const [reportState, setReportState] = useState<{
@@ -227,6 +231,10 @@ function AppContent() {
                       onNavigate={navigateTo}
                       onSelectItem={handleSelectItem}
                       onOpenAuth={() => setAuthModalOpen(true)}
+                      onEnterWars={(cat) => {
+                        if (cat) setWarsCategory(cat);
+                        navigateTo('wars');
+                      }}
                     />
                   )}
 
@@ -310,6 +318,15 @@ function AppContent() {
 
                   {currentTab === 'admin' && (
                     <AdminPanelView onBack={handleGoBack} />
+                  )}
+
+                  {currentTab === 'wars' && (
+                    <WarsView
+                      onOpenAuth={() => setAuthModalOpen(true)}
+                      onBackToHome={() => navigateTo('home')}
+                      initialCategory={warsCategory}
+                      onOpenPrivateChat={handleOpenPrivateChat}
+                    />
                   )}
                 </>
               )}

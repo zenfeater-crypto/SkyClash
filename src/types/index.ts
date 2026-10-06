@@ -173,6 +173,37 @@ export interface UserProfile {
   lastWorldChatAt?: number; // timestamp ms of last successful world message
   lastChatMessageNorm?: string; // normalized message string for duplicate detection
   sameMessageCount?: number; // consecutive identical message counter (max 2)
+
+  // Custom Frame Collection Assignments (Managed exclusively by Owner Admin)
+  profileFrameId?: string | null;
+  textFrameId?: string | null;
+}
+
+export type FrameType = 'profile' | 'text';
+
+export interface FrameItem {
+  id: string;
+  type: FrameType;
+  name: string;
+  category: string;
+  description: string;
+  assetUrl: string; // vector SVG data URL
+  previewUrl?: string;
+  createdAt: number;
+  isActive: boolean;
+}
+
+export interface FrameAuditLog {
+  id?: string;
+  action: 'GIVE_PROFILE_FRAME' | 'REMOVE_PROFILE_FRAME' | 'REPLACE_PROFILE_FRAME' | 'GIVE_TEXT_FRAME' | 'REMOVE_TEXT_FRAME' | 'REPLACE_TEXT_FRAME';
+  targetUserUid: string;
+  targetUsername: string;
+  frameId: string | null;
+  frameType: FrameType;
+  previousFrameId: string | null;
+  adminUid: string;
+  adminUsername: string;
+  timestamp: number;
 }
 
 export interface FriendRequest {
@@ -198,8 +229,49 @@ export interface Friendship {
   lastMessageTimestamp?: string | number;
 }
 
+export interface ChatReplyInfo {
+  messageId: string;
+  senderUid: string;
+  senderUsername: string;
+  senderName?: string;
+  senderRole?: UserRole;
+  textSnippet: string;
+}
+
+export interface PinnedChatMessage {
+  id: string;
+  messageId: string;
+  text: string;
+  senderUsername: string;
+  senderRole?: UserRole;
+  pinnedAt: number;
+  expiresAt: number; // 30-minute logical expiration
+  pinnedByUid: string;
+  pinnedByUsername: string;
+}
+
+export interface WorldChatGroup {
+  id: string;
+  name: string;
+  createdAt: number;
+  activeUserCount: number;
+  maxActiveUsers: number; // 75
+  status: 'active' | 'inactive';
+  lastActivity: number;
+  isAutoCreated?: boolean;
+  pinnedMessage?: PinnedChatMessage | null;
+}
+
+export interface WorldChatPresence {
+  uid: string;
+  username: string;
+  groupId: string;
+  lastActive: number;
+}
+
 export interface ChatMessage {
   id: string;
+  groupId?: string; // which world chat group this message belongs to
   senderUid: string;
   senderUsername: string;
   senderName?: string;
@@ -207,12 +279,16 @@ export interface ChatMessage {
   senderRole?: UserRole;
   senderMembership?: UserMembership | null;
   senderMembershipLevel?: MembershipLevel | null;
+  senderProfileFrameId?: string | null;
+  senderTextFrameId?: string | null;
   text: string;
   normalizedText?: string;
   sameMessageCount?: number;
   timestamp: string | number;
   createdAt?: number;
   expiresAt?: number;
+  replyTo?: ChatReplyInfo | null;
+  isPinned?: boolean;
 }
 
 export interface ReportItem {
@@ -315,5 +391,169 @@ export interface TradePost {
   note?: string;
   expiresAt: number;
 }
+
+// ==========================================
+// SKYBLOCK WARS & BEDWARS TYPES
+// ==========================================
+
+export type WarsCategory = 'skyblock' | 'bedwars';
+export type WarsSubTab = 'gangs' | 'announcements' | 'leaderboard' | 'matchings' | 'live';
+export type SkyblockWarsSubTab = WarsSubTab;
+
+export interface WarsGangMember {
+  uid: string;
+  username: string;
+  displayName?: string;
+  role: 'leader' | 'member';
+  joinedAt: number;
+  avatarUrl?: string;
+  profilePhoto?: string;
+  userRole?: UserRole;
+  membership?: UserMembership;
+  profileFrameId?: string | null;
+  textFrameId?: string | null;
+}
+
+export interface WarsGang {
+  id: string;
+  gameType?: WarsCategory;
+  name: string;
+  tag?: string;
+  iconUrl?: string;
+  leaderUid: string;
+  leaderUsername: string;
+  members: WarsGangMember[];
+  memberUids: string[];
+  createdAt: number;
+  status: 'active' | 'recruiting' | 'archived';
+  bio?: string;
+  stats?: {
+    wins: number;
+    losses: number;
+    rating: number;
+    kills?: number;
+  };
+  updatedAt?: number;
+}
+
+export interface WarsGangMessage {
+  id: string;
+  gangId: string;
+  gameType?: WarsCategory;
+  senderUid: string;
+  senderUsername: string;
+  senderDisplayName?: string;
+  senderAvatar?: string;
+  senderRole?: UserRole | string;
+  senderMembership?: UserMembership;
+  senderMembershipLevel?: MembershipLevel | string;
+  text: string;
+  createdAt: number;
+  expiresAt: number; // createdAt + 30 mins (30 * 60 * 1000)
+  isPinned?: boolean;
+}
+
+export interface GangInvitation {
+  id: string;
+  gangId: string;
+  gangName: string;
+  gangTag?: string;
+  gangIcon?: string;
+  gameType: WarsCategory;
+  senderUid: string;
+  senderUsername: string;
+  receiverUid: string;
+  receiverUsername: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: number;
+}
+
+export interface WarsAnnouncement {
+  id: string;
+  gameType?: WarsCategory;
+  title: string;
+  content: string;
+  thumbnailUrl?: string;
+  isImportant?: boolean;
+  createdByUid: string;
+  createdByUsername: string;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface WarsLeaderboardEntry {
+  id: string;
+  gameType?: WarsCategory;
+  rank: number;
+  gangId?: string;
+  gangName: string;
+  gangTag?: string;
+  gangIcon?: string;
+  score?: string;
+  notes?: string;
+  order: number;
+  updatedAt?: number;
+}
+
+export interface WarsMatching {
+  id: string;
+  gameType?: WarsCategory;
+  gangId: string;
+  gangName: string;
+  gangTag?: string;
+  gangIcon?: string;
+  thumbnailUrl?: string;
+  leaderUid: string;
+  leaderUsername: string;
+  title: string;
+  description: string;
+  format?: string; // e.g. "4v4", "5v5", "Scrim", "Ranked"
+  scheduledTime?: string;
+  status: 'open' | 'matched' | 'closed';
+  challengerGangId?: string;
+  challengerGangName?: string;
+  createdAt: number;
+}
+
+export interface WarsLiveUpdate {
+  id: string;
+  timestamp: number;
+  text: string;
+  author: string;
+}
+
+export interface WarsLiveMatch {
+  id: string;
+  gameType?: WarsCategory;
+  title: string;
+  category?: WarsCategory;
+  thumbnailUrl?: string;
+  description?: string;
+  gang1: {
+    id?: string;
+    name: string;
+    tag?: string;
+    icon?: string;
+    score: number;
+  };
+  gang2: {
+    id?: string;
+    name: string;
+    tag?: string;
+    icon?: string;
+    score: number;
+  };
+  status: 'upcoming' | 'live' | 'completed';
+  roundInfo: string;
+  streamUrl?: string;
+  notes?: string;
+  winnerId?: string;
+  winnerName?: string;
+  liveUpdates?: WarsLiveUpdate[];
+  createdAt: number;
+  updatedAt?: number;
+}
+
+
 
 

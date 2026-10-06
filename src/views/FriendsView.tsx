@@ -29,6 +29,7 @@ import { useAuth } from '../context/AuthContext';
 import { useUserData } from '../context/UserDataContext';
 import { FriendRequest, Friendship, UserProfile, UserRole } from '../types';
 import { RoleBadge } from '../components/RoleBadge';
+import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { stripSpoofedRoleTags } from '../lib/validation';
 import { BackButton } from '../components/BackButton';
 
@@ -319,10 +320,12 @@ export const FriendsView: React.FC<FriendsViewProps> = ({ onOpenAuth, onOpenPriv
                     className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800/90 hover:border-amber-500/40 flex items-center justify-between gap-3 shadow-lg transition"
                   >
                     <div className="flex items-center gap-3">
-                      <img
+                      <CircularProfileAvatar
                         src={partnerAvatar}
                         alt={partnerUsername}
-                        className="w-12 h-12 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+                        role={f.roles?.[partnerUid]}
+                        isAdmin={f.roles?.[partnerUid] === 'admin'}
+                        size="lg"
                       />
                       <div>
                         <div className="font-bold text-sm text-white flex items-center gap-1.5">
@@ -387,13 +390,10 @@ export const FriendsView: React.FC<FriendsViewProps> = ({ onOpenAuth, onOpenPriv
                   className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-4"
                 >
                   <div className="flex items-center gap-3">
-                    <img
-                      src={
-                        req.senderAvatar ||
-                        `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${req.senderUsername}`
-                      }
+                    <CircularProfileAvatar
+                      src={req.senderAvatar}
                       alt={req.senderUsername}
-                      className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700"
+                      size="md"
                     />
                     <div>
                       <div className="font-bold text-sm text-white">{req.senderUsername}</div>
@@ -460,14 +460,14 @@ export const FriendsView: React.FC<FriendsViewProps> = ({ onOpenAuth, onOpenPriv
                 className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center justify-between gap-3"
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={
-                      user.profilePhoto ||
-                      user.avatarUrl ||
-                      `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${user.username}`
-                    }
+                  <CircularProfileAvatar
+                    src={user.profilePhoto || user.avatarUrl}
                     alt={user.username}
-                    className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 object-cover"
+                    role={user.role}
+                    membership={user.membership}
+                    membershipLevel={user.membership?.level}
+                    isAdmin={user.role === 'admin'}
+                    size="md"
                   />
                   <div>
                     <div className="font-bold text-sm text-white flex items-center gap-1.5">
