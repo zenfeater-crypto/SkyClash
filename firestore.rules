@@ -114,7 +114,9 @@ service cloud.firestore {
       //    - Admin cannot be demoted (existing admin must remain 'admin')
       allow update: if (
         (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name', 'bio', 'profilePhoto', 'avatarUrl', 'lastWorldChatAt', 'lastChatMessageNorm', 'sameMessageCount'
+          'name', 'bio', 'profilePhoto', 'avatarUrl', 'profileSetupComplete', 'lastWorldChatAt', 'lastChatMessageNorm', 'sameMessageCount',
+          'coinBalance', 'loginStreak', 'lastRewardClaimDate', 'lastRewardClaimTimestamp', 'rewardCycleDay', 'lastChallengePostAt',
+          'profileFrameId', 'textFrameId'
         ]) &&
          (!('role' in resource.data) || request.resource.data.role == resource.data.role) &&
          (!('sameMessageCount' in request.resource.data) || request.resource.data.sameMessageCount <= 2)) ||
@@ -475,6 +477,62 @@ service cloud.firestore {
     // ADMIN FAVORITES (Owner Admin favorite frames)
     match /adminFavorites/{favId} {
       allow read, write: if isAdmin();
+    }
+
+    // MID MAN POSTS (Owner Admin-Only Create/Update/Delete, Public Read)
+    match /midman_posts/{postId} {
+      allow read: if true;
+      allow create: if isAdmin() && 
+        request.resource.data.createdByAdminUid == request.auth.uid &&
+        (request.resource.data.category == 'account_trades' || request.resource.data.category == 'upi_trade') &&
+        request.resource.data.appUsername is string &&
+        request.resource.data.gameUsername is string &&
+        request.resource.data.description is string &&
+        request.resource.data.charges is string;
+      allow update: if isAdmin() &&
+        (request.resource.data.category == 'account_trades' || request.resource.data.category == 'upi_trade') &&
+        request.resource.data.appUsername is string &&
+        request.resource.data.gameUsername is string &&
+        request.resource.data.description is string &&
+        request.resource.data.charges is string;
+      allow delete: if isAdmin();
+    }
+
+    // SOLO / DUO CHALLENGES (12-hour expiry, 250-coin posting fee, Owner Admin deletion)
+    match /solo_duo_challenges/{challengeId} {
+      allow read: if true;
+      allow create: if isSignedIn() && 
+        !isUserBanned(request.auth.uid) &&
+        request.resource.data.creatorUid == request.auth.uid &&
+        (request.resource.data.gameType == 'skyblock' || request.resource.data.gameType == 'bedwars') &&
+        (request.resource.data.matchType == 'solo_vs_solo' || request.resource.data.matchType == 'duo_vs_duo') &&
+        request.resource.data.gameUsername is string &&
+        request.resource.data.description is string &&
+        request.resource.data.createdAt is number &&
+        request.resource.data.expiresAt is number;
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    // TOURNAMENTS (Only Owner Admin Strike can create, publish, edit, or delete; Public read)
+    match /tournaments/{tournamentId} {
+      allow read: if true;
+      allow create: if isAdmin() &&
+        request.resource.data.name is string &&
+        (request.resource.data.category == 'skyblock' || request.resource.data.category == 'bedwars') &&
+        request.resource.data.maxPlayers is number;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // TOURNAMENT REGISTRATIONS (Only Owner Admin Strike can officially register/remove players; Public read)
+    match /tournament_registrations/{regId} {
+      allow read: if true;
+      allow create: if isAdmin() &&
+        request.resource.data.tournamentId is string &&
+        request.resource.data.userUid is string;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }

@@ -18,6 +18,7 @@ import { WarsGang, WarsGangMember } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
 import { RoleBadge } from '../RoleBadge';
 import { MembershipBadge } from '../MembershipBadge';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 
 interface GangAllMembersModalProps {
   gang: WarsGang;
@@ -62,20 +63,30 @@ export const GangAllMembersModal: React.FC<GangAllMembersModalProps> = ({
   const startIndex = (safePage - 1) * pageSize;
   const pageMembers = filteredMembers.slice(startIndex, startIndex + pageSize);
 
-  const handleRemoveMember = async (memberUid: string, memberUsername: string) => {
+  const [deleteMemberTarget, setDeleteMemberTarget] = useState<{ uid: string; username: string } | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+  const [deleteMemberError, setDeleteMemberError] = useState<string | null>(null);
+
+  const handleRemoveMember = (memberUid: string, memberUsername: string) => {
     if (!canManage) return;
     if (memberUid === gang.leaderUid) {
       alert("The Gang Leader cannot be removed. Only Owner Admin can change the leader.");
       return;
     }
 
-    if (!confirm(`Are you sure you want to remove @${memberUsername} from ${gang.name}?`)) {
-      return;
-    }
+    setDeleteMemberTarget({ uid: memberUid, username: memberUsername });
+    setDeleteMemberError(null);
+  };
+
+  const handleConfirmRemoveMember = async () => {
+    if (!deleteMemberTarget) return;
+
+    setIsDeletingMember(true);
+    setDeleteMemberError(null);
 
     try {
-      const updatedMembers = members.filter((m) => m.uid !== memberUid);
-      const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== memberUid);
+      const updatedMembers = members.filter((m) => m.uid !== deleteMemberTarget.uid);
+      const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== deleteMemberTarget.uid);
 
       await updateDoc(doc(db, 'wars_gangs', gang.id), {
         members: updatedMembers,
@@ -90,9 +101,13 @@ export const GangAllMembersModal: React.FC<GangAllMembersModalProps> = ({
           memberUids: updatedMemberUids
         });
       }
+
+      setDeleteMemberTarget(null);
     } catch (err: any) {
       console.error('Failed to remove member:', err);
-      alert('Failed to remove member: ' + err.message);
+      setDeleteMemberError(err.message || 'Failed to remove member.');
+    } finally {
+      setIsDeletingMember(false);
     }
   };
 
@@ -254,6 +269,24 @@ export const GangAllMembersModal: React.FC<GangAllMembersModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal for Removing Member */}
+      <DeleteConfirmModal
+        isOpen={!!deleteMemberTarget}
+        title="Remove Gang Member"
+        itemTypeLabel="Gang Member"
+        itemName={deleteMemberTarget ? `@${deleteMemberTarget.username}` : ''}
+        warningText={`Are you sure you want to remove @${deleteMemberTarget?.username} from ${gang.name}?`}
+        confirmButtonText="Confirm Remove"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingMember}
+        errorMessage={deleteMemberError}
+        onConfirm={handleConfirmRemoveMember}
+        onCancel={() => {
+          setDeleteMemberTarget(null);
+          setDeleteMemberError(null);
+        }}
+      />
     </div>
   );
 };

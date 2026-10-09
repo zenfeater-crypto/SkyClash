@@ -23,7 +23,9 @@ import {
   ChevronDown,
   Lock,
   LogIn,
-  Hourglass
+  Hourglass,
+  Zap,
+  Tag
 } from 'lucide-react';
 import { 
   collection, 
@@ -32,6 +34,7 @@ import {
   limit, 
   onSnapshot, 
   deleteDoc, 
+  updateDoc,
   doc, 
   startAfter, 
   getDocs,
@@ -43,7 +46,7 @@ import { useAuth } from '../context/AuthContext';
 import { useItems } from '../context/ItemsContext';
 import { usePets } from '../context/PetsContext';
 import { useUserData } from '../context/UserDataContext';
-import { TradePost, TradePostItem, UserRole } from '../types';
+import { TradePost, TradePostItem, UserRole, TradePostTag } from '../types';
 import { formatCoins, formatTimeAgo } from '../lib/formatters';
 import { parseCoinStringToNumber } from '../lib/itemHelpers';
 import { RoleBadge } from '../components/RoleBadge';
@@ -51,6 +54,7 @@ import { MembershipBadge } from '../components/MembershipBadge';
 import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { stripSpoofedRoleTags } from '../lib/validation';
 import { UserProfileModal } from '../components/UserProfileModal';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 function formatTradeExpiry(expiresAt?: number, createdAt?: number): string {
   const expiry = expiresAt || (createdAt ? createdAt + 24 * 60 * 60 * 1000 : 0);
@@ -94,7 +98,8 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'ALL' | 'BOOKMARKED' | 'MY_POSTS'>('ALL');
+  const [filterType, setFilterType] = useState<'ALL' | 'URGENT' | 'LOOKING_FOR' | 'BOOKMARKED' | 'MY_POSTS'>('ALL');
+  const [updatingTagPostId, setUpdatingTagPostId] = useState<string | null>(null);
 
   // User Profile Popup state
   const [selectedUserUid, setSelectedUserUid] = useState<string | null>(null);
@@ -107,6 +112,9 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
 
   // Deletion feedback
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTargetPost, setDeleteTargetPost] = useState<TradePost | null>(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [deletePostError, setDeletePostError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   // Live real-time ticker for 24h expiration (updates every 10s without page reload)
@@ -205,7 +213,7 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
   }, [posts, currentTime, currentUser, isAdmin, isOfficer, canDeleteChats]);
 
   // Delete trade post (Owner, Staff, or JMD with deleteChats permission)
-  const handleDeletePost = async (post: TradePost) => {
+  const handleDeletePost = (post: TradePost) => {
     const isOwner = currentUser?.uid === post.posterUid;
     const canDelete = isOwner || isAdmin || isOfficer || canDeleteChats;
 
@@ -216,16 +224,24 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
       return;
     }
 
-    if (!confirm('Are you sure you want to delete this trade post?')) return;
+    setDeleteTargetPost(post);
+    setDeletePostError(null);
+  };
 
-    setDeletingId(post.id);
+  const handleConfirmDeletePost = async () => {
+    if (!deleteTargetPost) return;
+
+    const isOwner = currentUser?.uid === deleteTargetPost.posterUid;
+    setIsDeletingPost(true);
+    setDeletePostError(null);
+
     try {
-      await deleteDoc(doc(db, 'trade_posts', post.id));
+      await deleteDoc(doc(db, 'trade_posts', deleteTargetPost.id));
       if (!isOwner && userProfile) {
         await addDoc(collection(db, 'moderationHistory'), {
           action: 'CHAT_MESSAGE_DELETED',
-          targetUid: post.posterUid,
-          targetUsername: post.posterUsername,
+          targetUid: deleteTargetPost.posterUid,
+          targetUsername: deleteTargetPost.posterUsername,
           performedByUid: userProfile.uid,
           performedByUsername: userProfile.username,
           performedByRole: userProfile.role,
@@ -233,17 +249,61 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
           ...(userProfile.role === 'jmd' ? { jmdUid: userProfile.uid, jmdUsername: userProfile.username } : {}),
           timestamp: Date.now(),
           reason: 'Trade post removed by moderator',
-          details: { postId: post.id, note: post.note || '' },
+          details: { postId: deleteTargetPost.id, note: deleteTargetPost.note || '' },
         }).catch((err) => console.warn('Audit record failed:', err));
       }
-      setPosts((prev) => prev.filter((p) => p.id !== post.id));
+      setPosts((prev) => prev.filter((p) => p.id !== deleteTargetPost.id));
       setActionSuccess('Trade post removed.');
       setTimeout(() => setActionSuccess(null), 3000);
+      setDeleteTargetPost(null);
     } catch (err: any) {
       console.error('Error deleting trade post:', err);
-      alert(err.message || 'Failed to delete trade post.');
+      setDeletePostError(err.message || 'Failed to delete trade post.');
     } finally {
-      setDeletingId(null);
+      setIsDeletingPost(false);
+    }
+  };
+
+  // Toggle temporary trade tags ('urgent', 'looking_for') by post owner
+  const handleToggleTag = async (post: TradePost, tagToToggle: TradePostTag) => {
+    if (!currentUser || currentUser.uid !== post.posterUid) {
+      alert('Only the owner of this trade post can modify its tags.');
+      return;
+    }
+
+    const currentTags = Array.isArray(post.tags) ? [...post.tags] : [];
+    if (post.isUrgent && !currentTags.includes('urgent')) currentTags.push('urgent');
+    if (post.isLookingFor && !currentTags.includes('looking_for')) currentTags.push('looking_for');
+
+    const updatedTags = currentTags.includes(tagToToggle)
+      ? currentTags.filter((t) => t !== tagToToggle)
+      : [...currentTags, tagToToggle];
+
+    const isUrgent = updatedTags.includes('urgent');
+    const isLookingFor = updatedTags.includes('looking_for');
+
+    setUpdatingTagPostId(post.id);
+    try {
+      await updateDoc(doc(db, 'trade_posts', post.id), {
+        tags: updatedTags,
+        isUrgent,
+        isLookingFor,
+      });
+
+      setPosts((prev) =>
+        prev.map((p) => (p.id === post.id ? { ...p, tags: updatedTags, isUrgent, isLookingFor } : p))
+      );
+      setActionSuccess(
+        updatedTags.includes(tagToToggle)
+          ? `Added "${tagToToggle === 'urgent' ? '⚡ Urgent' : '🔍 Looking For'}" tag.`
+          : `Removed "${tagToToggle === 'urgent' ? 'Urgent' : 'Looking For'}" tag.`
+      );
+      setTimeout(() => setActionSuccess(null), 2500);
+    } catch (err: any) {
+      console.error('Failed to update trade tags:', err);
+      alert(err.message || 'Failed to update trade tags.');
+    } finally {
+      setUpdatingTagPostId(null);
     }
   };
 
@@ -374,13 +434,17 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
     });
 
     // 2. Filter type
-    if (filterType === 'BOOKMARKED') {
+    if (filterType === 'URGENT') {
+      result = result.filter((p) => p.isUrgent || p.tags?.includes('urgent'));
+    } else if (filterType === 'LOOKING_FOR') {
+      result = result.filter((p) => p.isLookingFor || p.tags?.includes('looking_for'));
+    } else if (filterType === 'BOOKMARKED') {
       result = result.filter((p) => isFavorite(p.id));
     } else if (filterType === 'MY_POSTS' && currentUser) {
       result = result.filter((p) => p.posterUid === currentUser.uid);
     }
 
-    // 3. Search query: username, display name, item name
+    // 3. Search query: username, display name, item name, note, or tags
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((p) => {
@@ -388,7 +452,10 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
         const matchYourItems = p.yourItems?.some((it) => it.name.toLowerCase().includes(q));
         const matchMyItems = p.myItems?.some((it) => it.name.toLowerCase().includes(q));
         const matchNote = p.note?.toLowerCase().includes(q);
-        return matchUser || matchYourItems || matchMyItems || matchNote;
+        const matchTags = p.tags?.some((t) => t.toLowerCase().includes(q)) ||
+          ((q === 'urgent' || q === '⚡ urgent') && (p.isUrgent || p.tags?.includes('urgent'))) ||
+          ((q === 'looking for' || q === 'looking_for') && (p.isLookingFor || p.tags?.includes('looking_for')));
+        return matchUser || matchYourItems || matchMyItems || matchNote || matchTags;
       });
     }
 
@@ -483,8 +550,8 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
           )}
         </div>
 
-        {/* Sub-Filters: All / Bookmarked / My Posts */}
-        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0">
+        {/* Sub-Filters: All / Urgent / Looking For / Bookmarked / My Posts */}
+        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-none">
           <button
             onClick={() => setFilterType('ALL')}
             className={`px-3 py-2 rounded-xl text-xs font-bold transition shrink-0 ${
@@ -494,6 +561,36 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
             }`}
           >
             All Trades ({posts.length})
+          </button>
+
+          <button
+            onClick={() => setFilterType('URGENT')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              filterType === 'URGENT'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm shadow-rose-500/20'
+                : 'text-slate-400 hover:text-rose-300 bg-slate-950/60 border border-slate-800'
+            }`}
+          >
+            <Zap className={`w-3.5 h-3.5 ${filterType === 'URGENT' ? 'text-rose-400 fill-rose-400' : 'text-rose-400'}`} />
+            <span>Urgent</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-900 border border-slate-800 font-mono text-slate-300">
+              {posts.filter((p) => p.isUrgent || p.tags?.includes('urgent')).length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setFilterType('LOOKING_FOR')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
+              filterType === 'LOOKING_FOR'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20'
+                : 'text-slate-400 hover:text-cyan-300 bg-slate-950/60 border border-slate-800'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Looking For</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-900 border border-slate-800 font-mono text-slate-300">
+              {posts.filter((p) => p.isLookingFor || p.tags?.includes('looking_for')).length}
+            </span>
           </button>
 
           <button
@@ -615,6 +712,19 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
                           <Hourglass className="w-3 h-3 text-amber-400 animate-pulse" />
                           <span>{formatTradeExpiry(post.expiresAt, post.createdAt)}</span>
                         </span>
+                        {/* Temporary Trade Tags */}
+                        {(post.isUrgent || post.tags?.includes('urgent')) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/40 text-rose-300 font-extrabold text-[10px] tracking-wider uppercase shadow-sm shadow-rose-500/20 animate-pulse">
+                            <Zap className="w-3 h-3 text-rose-400 fill-rose-400" />
+                            <span>URGENT</span>
+                          </span>
+                        )}
+                        {(post.isLookingFor || post.tags?.includes('looking_for')) && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 font-extrabold text-[10px] tracking-wider uppercase shadow-sm shadow-cyan-500/20">
+                            <Search className="w-3 h-3 text-cyan-400" />
+                            <span>LOOKING FOR</span>
+                          </span>
+                        )}
                         {isOwner && (
                           <span className="text-cyan-400 font-bold bg-cyan-500/10 px-1.5 py-0.2 rounded border border-cyan-500/30">
                             Your Post
@@ -685,6 +795,49 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
                     )}
                   </div>
                 </div>
+
+                {/* Post Owner Interactive Tag Toggle Bar */}
+                {isOwner && (
+                  <div className="flex items-center justify-between gap-2.5 p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/80 text-xs font-mono flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Tag className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="text-slate-400 text-[11px] font-semibold">Manage Tags:</span>
+                      <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">(temporary highlight)</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTag(post, 'urgent')}
+                        disabled={updatingTagPostId === post.id}
+                        className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 ${
+                          post.isUrgent || post.tags?.includes('urgent')
+                            ? 'bg-rose-500/25 border-rose-500/60 text-rose-300 shadow-sm shadow-rose-500/20'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-rose-300 hover:border-slate-700'
+                        }`}
+                        title="Toggle Urgent tag"
+                      >
+                        <Zap className={`w-3 h-3 ${post.isUrgent || post.tags?.includes('urgent') ? 'text-rose-400 fill-rose-400' : 'text-slate-400'}`} />
+                        <span>{post.isUrgent || post.tags?.includes('urgent') ? 'Urgent ✓' : '+ Urgent'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTag(post, 'looking_for')}
+                        disabled={updatingTagPostId === post.id}
+                        className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold transition flex items-center gap-1.5 ${
+                          post.isLookingFor || post.tags?.includes('looking_for')
+                            ? 'bg-cyan-500/25 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/20'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-slate-700'
+                        }`}
+                        title="Toggle Looking For tag"
+                      >
+                        <Search className="w-3 h-3 text-cyan-400" />
+                        <span>{post.isLookingFor || post.tags?.includes('looking_for') ? 'Looking For ✓' : '+ Looking For'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* TRADE CARD: TWO CLEARLY SEPARATED SIDES */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -896,6 +1049,24 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
           onNavigateToSettings={onNavigateToSettings}
         />
       )}
+
+      {/* Delete Confirmation Modal for Trade Posts */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTargetPost}
+        title="Confirm Trade Post Deletion"
+        itemTypeLabel="Marketplace Trade Post"
+        itemName={deleteTargetPost ? `@${deleteTargetPost.posterUsername}'s Trade Post` : ''}
+        warningText="Are you sure you want to permanently delete this trade post? It will be removed immediately from the public trade feed."
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingPost}
+        errorMessage={deletePostError}
+        onConfirm={handleConfirmDeletePost}
+        onCancel={() => {
+          setDeleteTargetPost(null);
+          setDeletePostError(null);
+        }}
+      />
     </div>
   );
 };

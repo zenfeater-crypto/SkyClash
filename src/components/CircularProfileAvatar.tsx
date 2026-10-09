@@ -78,6 +78,7 @@ export const CircularProfileAvatar: React.FC<CircularProfileAvatarProps> = ({
 
   // Fallback image using dicebear seed
   const fallbackSrc = `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(alt || 'trader')}`;
+  const imageSrc = src || fallbackSrc;
   // Check custom assigned Profile Frame from Frame Collection
   const customProfileFrame = profileFrameId ? getProfileFrameById(profileFrameId) : null;
   if (customProfileFrame) {

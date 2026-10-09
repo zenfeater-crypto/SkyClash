@@ -25,6 +25,7 @@ import { MembershipBadge } from '../components/MembershipBadge';
 import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { CommunityAdBanner } from '../components/CommunityAdBanner';
 import { HomeWarsBanner } from '../components/HomeWarsBanner';
+import { DailyRewardsCard } from '../components/DailyRewardsCard';
 import { WarsCategory } from '../types';
 
 interface HomeViewProps {
@@ -62,6 +63,19 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
       <div className="relative rounded-3xl overflow-hidden border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 p-6 sm:p-10 shadow-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        {/* User Coin Balance Badge (TOP-RIGHT corner of Home) */}
+        <div className="sm:absolute sm:top-8 sm:right-8 z-20 mb-4 sm:mb-0 inline-flex items-center gap-2.5 px-4 py-2 rounded-2xl bg-slate-950/80 border border-amber-500/40 shadow-xl shadow-amber-500/10 backdrop-blur-md">
+          <span className="text-xl select-none">🪙</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-amber-400 font-mono uppercase font-black tracking-wider leading-none">
+              COIN BALANCE
+            </span>
+            <span className="text-base sm:text-lg font-black text-white font-mono leading-tight tracking-tight">
+              {userProfile?.coinBalance !== undefined ? userProfile.coinBalance.toLocaleString() : '0'}
+            </span>
+          </div>
+        </div>
 
         <div className="relative z-10 max-w-3xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-semibold uppercase tracking-wider mb-4">
@@ -158,6 +172,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ onNavigate, onSelectItem, on
           </div>
         )}
       </div>
+
+      {/* DAILY LOGIN REWARDS SECTION */}
+      <DailyRewardsCard onOpenAuth={onOpenAuth} />
 
       {/* LARGE PROMINENT WARS SECTION ON HOME */}
       <HomeWarsBanner onEnterWars={handleOpenWars} />

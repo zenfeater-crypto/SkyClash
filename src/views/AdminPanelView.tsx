@@ -31,7 +31,8 @@ import {
   Sparkles,
   ExternalLink,
   Key,
-  Check
+  Check,
+  Trophy
 } from 'lucide-react';
 import { 
   collection, 
@@ -79,6 +80,8 @@ import { formatRemainingTime, isUserBanned, isUserMuted, getDetailedBanStatus } 
 import { sanitizeForFirestore, stripSpoofedRoleTags } from '../lib/validation';
 import { BackButton } from '../components/BackButton';
 import { FrameCollectionAdminView } from '../components/frames/FrameCollectionAdminView';
+import { AdminTournamentsPanelTab } from '../components/wars/AdminTournamentsPanelTab';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 
 interface AdminPanelViewProps {
   onBack?: () => void;
@@ -108,7 +111,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
   const { items, addItem, updateItem, deleteItem, seedInitialDatabase } = useItems();
 
   // Admin tabs vs Officer vs JMD tabs
-  type AdminTab = 'dashboard' | 'jmd_permissions' | 'memberships' | 'frame_collection' | 'users' | 'reports' | 'moderation' | 'roles' | 'values' | 'history';
+  type AdminTab = 'dashboard' | 'tournaments' | 'jmd_permissions' | 'memberships' | 'frame_collection' | 'users' | 'reports' | 'moderation' | 'roles' | 'values' | 'history';
   const [activeTab, setActiveTab] = useState<AdminTab>(
     isAdmin 
       ? 'dashboard' 
@@ -146,6 +149,11 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
     vanguardProfile: '',
     vanguardMessage: '',
   });
+
+  // Delete Catalog Item confirmation modal
+  const [deleteTargetCatalogItem, setDeleteTargetCatalogItem] = useState<SkyblockItem | null>(null);
+  const [isDeletingCatalogItem, setIsDeletingCatalogItem] = useState(false);
+  const [deleteCatalogItemError, setDeleteCatalogItemError] = useState<string | null>(null);
 
   // JMD Permissions State (Owner Admin only)
   const [jmdSearchTerm, setJmdSearchTerm] = useState('');
@@ -742,17 +750,29 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
     }
   };
 
-  const handleDeleteItem = async (item: SkyblockItem) => {
+  const handleDeleteItem = (item: SkyblockItem) => {
     if (!isAdmin) {
       setErrorMessage('Permission denied: Only Admins can delete catalog items.');
       return;
     }
-    if (!confirm(`Are you sure you want to delete "${item.name}" from the database?`)) return;
+    setDeleteTargetCatalogItem(item);
+    setDeleteCatalogItemError(null);
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!deleteTargetCatalogItem || !isAdmin) return;
+
+    setIsDeletingCatalogItem(true);
+    setDeleteCatalogItemError(null);
+
     try {
-      await deleteItem(item.id);
-      setStatusMessage(`Item "${item.name}" deleted.`);
+      await deleteItem(deleteTargetCatalogItem.id);
+      setStatusMessage(`Item "${deleteTargetCatalogItem.name}" deleted.`);
+      setDeleteTargetCatalogItem(null);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Could not delete item.');
+      setDeleteCatalogItemError(err.message || 'Could not delete item.');
+    } finally {
+      setIsDeletingCatalogItem(false);
     }
   };
 
@@ -1144,6 +1164,20 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
             <span>Frame Collection</span>
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTab('tournaments')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+              activeTab === 'tournaments'
+                ? 'bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 text-white border border-amber-400/60 shadow-lg shadow-amber-950/40 ring-1 ring-amber-400/30'
+                : 'text-amber-300/80 hover:text-amber-200'
+            }`}
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Tournaments & Rosters</span>
           </button>
         )}
 
@@ -2260,6 +2294,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
       {/* ============================================================ */}
       {isAdmin && activeTab === 'frame_collection' && (
         <FrameCollectionAdminView />
+      )}
+
+      {/* ============================================================ */}
+      {/* SECTION 1.9: TOURNAMENTS & REGISTRATIONS (OWNER ADMIN ONLY)   */}
+      {/* ============================================================ */}
+      {isAdmin && activeTab === 'tournaments' && (
+        <AdminTournamentsPanelTab />
       )}
 
       {/* ============================================================ */}
@@ -3657,6 +3698,24 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
           </div>
         </div>
       )}
+
+      {/* Universal Delete Confirmation Modal for Catalog Items */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTargetCatalogItem}
+        title="Confirm Item Deletion"
+        itemTypeLabel="Catalog Item"
+        itemName={deleteTargetCatalogItem?.name || ''}
+        warningText={`Are you sure you want to permanently delete "${deleteTargetCatalogItem?.name}" from the values catalog? This cannot be undone.`}
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingCatalogItem}
+        errorMessage={deleteCatalogItemError}
+        onConfirm={handleConfirmDeleteItem}
+        onCancel={() => {
+          setDeleteTargetCatalogItem(null);
+          setDeleteCatalogItemError(null);
+        }}
+      />
     </div>
   );
 };

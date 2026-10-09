@@ -4,7 +4,7 @@ import { Sparkles, Shield, AlertCircle, Loader2, Camera, X } from 'lucide-react'
 import { validateUsername, processProfileImageFile } from '../lib/validation';
 
 export const UsernameModal: React.FC = () => {
-  const { needsUsernameModal, claimGoogleUsername, currentUser } = useAuth();
+  const { needsUsernameModal, isProfileLoading, loading: authLoading, claimGoogleUsername, currentUser } = useAuth();
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
@@ -12,7 +12,8 @@ export const UsernameModal: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  if (!needsUsernameModal) return null;
+  // Requirement 5: Do NOT show setup screen while the user profile is still loading or if not needed
+  if (!needsUsernameModal || isProfileLoading || authLoading || !currentUser) return null;
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

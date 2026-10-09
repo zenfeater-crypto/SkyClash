@@ -21,6 +21,7 @@ import { PrivateChatView } from './views/PrivateChatView';
 import { SettingsView } from './views/SettingsView';
 import { AdminPanelView } from './views/AdminPanelView';
 import { WarsView } from './views/WarsView';
+import { MidManView } from './views/MidManView';
 import { TradeItemSlot, SkyblockItem, UserRole, WarsCategory } from './types';
 import { BanNoticeModal } from './components/BanNoticeModal';
 import { parseCoinStringToNumber } from './lib/itemHelpers';
@@ -33,6 +34,13 @@ function AppContent() {
   const [navHistory, setNavHistory] = useState<NavTab[]>(['home']);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+
+  // Requirement 1: Once user is authenticated, close sign-in modal and directly display Home
+  React.useEffect(() => {
+    if (currentUser) {
+      setAuthModalOpen(false);
+    }
+  }, [currentUser]);
 
   // Handle splash completion and routing based on authentication state
   const handleSplashFinish = () => {
@@ -242,6 +250,13 @@ function AppContent() {
                     <ValueListView
                       onSelectItem={handleSelectItem}
                       onAddToTradeOffer={handleAddToTradeOffer}
+                    />
+                  )}
+
+                  {currentTab === 'midman' && (
+                    <MidManView
+                      onOpenPrivateChat={handleOpenPrivateChat}
+                      onOpenAuth={() => setAuthModalOpen(true)}
                     />
                   )}
 

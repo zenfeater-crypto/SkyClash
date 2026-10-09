@@ -27,6 +27,7 @@ import {
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { WarsLiveMatch, WarsLiveUpdate, WarsGang, WarsCategory } from '../../types';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 
 interface WarsLiveWarsProps {
   gangs: WarsGang[];
@@ -57,6 +58,11 @@ export const WarsLiveWars: React.FC<WarsLiveWarsProps> = ({ gangs, gameType = 's
   const [formWinnerName, setFormWinnerName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<WarsLiveMatch | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Live Update commentary input
   const [newUpdateText, setNewUpdateText] = useState('');
@@ -127,16 +133,28 @@ export const WarsLiveWars: React.FC<WarsLiveWarsProps> = ({ gangs, gameType = 's
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+  const handleDelete = (match: WarsLiveMatch, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!isAdmin) return;
-    if (!confirm('Are you sure you want to delete this live war match?')) return;
+    setDeleteTarget(match);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !isAdmin) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
     try {
-      await deleteDoc(doc(db, 'wars_live', id));
-      if (activeMatch?.id === id) setActiveMatch(null);
+      await deleteDoc(doc(db, 'wars_live', deleteTarget.id));
+      if (activeMatch?.id === deleteTarget.id) setActiveMatch(null);
+      setDeleteTarget(null);
     } catch (err: any) {
       console.error('Failed to delete live war:', err);
-      alert('Delete failed: ' + err.message);
+      setDeleteError(err.message || 'Failed to delete live war.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -300,7 +318,7 @@ export const WarsLiveWars: React.FC<WarsLiveWarsProps> = ({ gangs, gameType = 's
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={(e) => handleDelete(match.id, e)}
+                      onClick={(e) => handleDelete(match, e)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
                       title="Delete Match"
                     >
@@ -657,6 +675,24 @@ export const WarsLiveWars: React.FC<WarsLiveWarsProps> = ({ gangs, gameType = 's
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal for Live Wars */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Confirm Live War Deletion"
+        itemTypeLabel="Live Warfare Match"
+        itemName={deleteTarget ? `${deleteTarget.title} (${deleteTarget.gang1.name} vs ${deleteTarget.gang2.name})` : ''}
+        warningText="Are you sure you want to permanently delete this live war match? This will remove the match from the live scoreboard."
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+      />
     </div>
   );
 };

@@ -27,6 +27,7 @@ import { useAuth } from '../../context/AuthContext';
 import { WarsMatching, WarsGang, WarsCategory, UserRole } from '../../types';
 import { stripSpoofedRoleTags } from '../../lib/validation';
 import { MessageSquare } from 'lucide-react';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 
 interface WarsMatchingsProps {
   userGangs: WarsGang[];
@@ -60,6 +61,11 @@ export const WarsMatchings: React.FC<WarsMatchingsProps> = ({
   const [formThumbnail, setFormThumbnail] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<WarsMatching | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Gangs where current user is Leader (or all gangs if Admin) belonging to THIS gameType
   const relevantGangs = userGangs.filter((g) => {
@@ -209,13 +215,25 @@ export const WarsMatchings: React.FC<WarsMatchingsProps> = ({
     }
   };
 
-  const handleDeleteMatching = async (matchingId: string) => {
-    if (!confirm('Are you sure you want to delete this matching challenge?')) return;
+  const handleDeleteMatching = (matching: WarsMatching) => {
+    setDeleteTarget(matching);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDeleteMatching = async () => {
+    if (!deleteTarget) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+
     try {
-      await deleteDoc(doc(db, 'wars_matchings', matchingId));
+      await deleteDoc(doc(db, 'wars_matchings', deleteTarget.id));
+      setDeleteTarget(null);
     } catch (err: any) {
       console.error('Error deleting matching:', err);
-      alert('Failed to delete: ' + err.message);
+      setDeleteError(err.message || 'Failed to delete matching.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -384,7 +402,7 @@ export const WarsMatchings: React.FC<WarsMatchingsProps> = ({
 
                   {canManage && (
                     <button
-                      onClick={() => handleDeleteMatching(item.id)}
+                      onClick={() => handleDeleteMatching(item)}
                       className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 ml-auto"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -522,6 +540,24 @@ export const WarsMatchings: React.FC<WarsMatchingsProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal for Matchings */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Confirm Match Challenge Deletion"
+        itemTypeLabel="War Match Challenge"
+        itemName={deleteTarget?.title || ''}
+        warningText="Are you sure you want to permanently delete this matching challenge? This will remove the listing from the active queue."
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
+        onConfirm={handleConfirmDeleteMatching}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+      />
     </div>
   );
 };

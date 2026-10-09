@@ -151,6 +151,7 @@ export interface UserProfile {
   membership?: UserMembership | null;
   createdAt: string | number;
   bio?: string; // max 100 words
+  profileSetupComplete?: boolean; // Flag indicating username and name setup has been completed
   
   // Moderation: Ban system
   banned?: boolean;
@@ -177,6 +178,79 @@ export interface UserProfile {
   // Custom Frame Collection Assignments (Managed exclusively by Owner Admin)
   profileFrameId?: string | null;
   textFrameId?: string | null;
+
+  // Economy & Daily Login Rewards
+  coinBalance?: number;
+  loginStreak?: number;
+  lastRewardClaimDate?: string; // YYYY-MM-DD in UTC
+  lastRewardClaimTimestamp?: number; // ms
+  rewardCycleDay?: number; // 1 to 7
+
+  // Solo / Duo Challenge Post Cooldown
+  lastChallengePostAt?: number; // ms timestamp of last created challenge post
+}
+
+// TOURNAMENTS
+export type TournamentCategory = 'skyblock' | 'bedwars';
+
+export interface Tournament {
+  id: string;
+  name: string; // 1. Tournament Name
+  bannerUrl: string; // 2. Tournament Banner
+  category: TournamentCategory; // 3. Game/Category: Skyblock or Bedwars
+  dateAndTiming: string; // 4. Tournament Date and Timing (e.g. "Oct 15, 2026 • 8:00 PM IST")
+  registeredCount: number; // 5. Registered Players count
+  maxPlayers: number; // 5. Maximum Players (e.g. 32)
+  winningAmount: string; // 6. Winning Amount (e.g. "1,000,000 Coins" or "₹5,000")
+  entryFee: string; // 7. Entry Fee (e.g. "Free" or "500 Coins")
+  description?: string; // Optional description
+  isPublished: boolean; // Only published tournaments appear in public feed
+  registeredUserUids?: string[]; // Registered user UIDs for duplicate check and quick count
+  createdAt: number;
+  updatedAt?: number;
+  createdByAdminUid: string;
+  createdByUsername: string;
+}
+
+export interface TournamentRegistration {
+  id: string; // tournamentId_userUid
+  tournamentId: string;
+  tournamentName?: string;
+  userUid: string;
+  appUsername: string;
+  displayName: string;
+  avatarUrl?: string;
+  profilePhoto?: string;
+  role?: UserRole;
+  membership?: UserMembership | null;
+  profileFrameId?: string | null;
+  textFrameId?: string | null;
+  registeredAt: number;
+  registeredByAdminUid: string;
+  registeredByUsername: string;
+  notes?: string;
+}
+
+export type SoloDuoGameType = 'skyblock' | 'bedwars';
+export type SoloDuoMatchType = 'solo_vs_solo' | 'duo_vs_duo';
+
+export interface SoloDuoChallenge {
+  id: string;
+  gameType: SoloDuoGameType;
+  matchType: SoloDuoMatchType;
+  creatorUid: string;
+  creatorUsername: string;
+  creatorName: string;
+  creatorAvatarUrl?: string;
+  creatorProfilePhoto?: string;
+  creatorRole?: UserRole;
+  creatorMembership?: UserMembership | null;
+  creatorProfileFrameId?: string | null;
+  creatorTextFrameId?: string | null;
+  gameUsername: string; // Player's Minecraft / in-game username
+  description: string;
+  createdAt: number;
+  expiresAt: number; // createdAt + 12 hours
 }
 
 export type FrameType = 'profile' | 'text';
@@ -366,6 +440,8 @@ export interface TradePostItem {
   petTier?: PetTier;
 }
 
+export type TradePostTag = 'looking_for' | 'urgent' | string;
+
 export interface TradePost {
   id: string;
   posterUid: string;
@@ -390,6 +466,9 @@ export interface TradePost {
   status: 'OPEN' | 'COMPLETED' | 'CANCELLED';
   note?: string;
   expiresAt: number;
+  tags?: TradePostTag[];
+  isUrgent?: boolean;
+  isLookingFor?: boolean;
 }
 
 // ==========================================
@@ -554,6 +633,19 @@ export interface WarsLiveMatch {
   updatedAt?: number;
 }
 
+export type MidManCategory = 'account_trades' | 'upi_trade';
 
-
-
+export interface MidManPost {
+  id: string;
+  category: MidManCategory;
+  targetUserUid: string;
+  appUsername: string;
+  appDisplayName?: string;
+  gameUsername: string;
+  profilePhoto?: string;
+  description: string;
+  charges: string;
+  createdAt: number;
+  createdByAdminUid: string;
+  updatedAt?: number;
+}

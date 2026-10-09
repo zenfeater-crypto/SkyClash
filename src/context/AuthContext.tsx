@@ -27,6 +27,7 @@ interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
+  isProfileLoading: boolean;
   needsUsernameModal: boolean;
   authError: string | null;
   isAdmin: boolean;
@@ -69,70 +70,137 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
 }
 
+// Helper to determine if a profile is already completed (Rule 2 & 3)
+export function isCompletedUserProfile(data: Partial<UserProfile> | undefined | null): boolean {
+  if (!data) return false;
+  // Explicitly completed flag
+  if (data.profileSetupComplete === true) return true;
+  // Rule 3: Old existing users who have required username and name
+  const hasValidUsername = typeof data.username === 'string' && data.username.trim().length >= 3;
+  const hasValidName = 
+    (typeof data.name === 'string' && data.name.trim().length > 0) ||
+    (typeof (data as any).displayName === 'string' && (data as any).displayName.trim().length > 0) ||
+    hasValidUsername;
+  return Boolean(hasValidUsername && hasValidName);
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [needsUsernameModal, setNeedsUsernameModal] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // In-flight fetch deduplication to avoid concurrent duplicate requests for the same UID
+  const inFlightFetchesRef = React.useRef<Map<string, Promise<UserProfile | null>>>(new Map());
+
   const clearError = () => setAuthError(null);
 
-  // Load user profile from Firestore and enforce runtime Owner Admin authorization
-  const fetchUserProfile = async (user: User) => {
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userDocRef);
-
-      if (userSnap.exists()) {
-        const data = userSnap.data() as UserProfile;
-        if (!data.name) {
-          data.name = data.username;
-        }
-
-        // CRITICAL REQUIREMENT #1:
-        // Get the exact Firebase Authentication UID from the currently authenticated user at runtime (user.uid).
-        // The currently authenticated account shown in the app is:
-        // Display Name: Strike, Username: @Strike
-        // Make THIS CURRENTLY AUTHENTICATED ACCOUNT the ONE AND ONLY Owner Admin.
-        const isStrikeOwner = 
-          data.username?.toLowerCase() === 'strike' ||
-          data.normalizedUsername === 'strike' ||
-          data.name?.toLowerCase() === 'strike' ||
-          user.displayName?.toLowerCase() === 'strike';
-
-        if (isStrikeOwner) {
-          if (data.role !== 'admin') {
-            data.role = 'admin';
-            await updateDoc(userDocRef, { role: 'admin' }).catch((err) => {
-              console.warn('Could not auto-promote Strike account to admin in Firestore:', err);
-            });
-          }
-        } else {
-          // DEFAULT: Existing users without a role safely become role = "user"
-          // Do not overwrite existing valid roles
-          if (!data.role || (data.role !== 'officer' && data.role !== 'trusted' && data.role !== 'user' && data.role !== 'admin' && data.role !== 'jmd')) {
-            data.role = 'user';
-            await updateDoc(userDocRef, { role: 'user' }).catch(() => {});
-          }
-          // Exactly ONE Admin: no other user account can hold the admin role
-          if (data.role === 'admin') {
-            data.role = 'user';
-            await updateDoc(userDocRef, { role: 'user' }).catch(() => {});
-          }
-        }
-
-        setUserProfile(data);
-        setNeedsUsernameModal(false);
-      } else {
-        // User logged in but no profile exists yet
-        setNeedsUsernameModal(true);
-      }
-    } catch (err: any) {
-      console.error('Error fetching user profile:', err);
+  // Load and verify user profile from Firestore strictly by Firebase Auth UID
+  const checkAndFetchUserProfile = async (user: User): Promise<UserProfile | null> => {
+    if (!user || !user.uid) {
+      setUserProfile(null);
+      setNeedsUsernameModal(false);
+      setIsProfileLoading(false);
+      return null;
     }
+
+    // Return in-flight request if one is already running for this UID
+    const inFlight = inFlightFetchesRef.current.get(user.uid);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const fetchPromise = (async () => {
+      setIsProfileLoading(true);
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+
+        let userSnap = null;
+        let lastError = null;
+
+        // Retry loop for temporary network/cache glitches (up to 3 attempts)
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            userSnap = await getDoc(userDocRef);
+            lastError = null;
+            break;
+          } catch (err: any) {
+            lastError = err;
+            console.warn(`[Auth] getDoc users/${user.uid} attempt ${attempt} notice:`, err);
+            if (attempt < 3) {
+              await new Promise((r) => setTimeout(r, 400 * attempt));
+            }
+          }
+        }
+
+        // Handle persistent Firestore fetch failure
+        if (lastError || !userSnap) {
+          console.warn('[Auth] Firestore profile check failed temporarily:', lastError);
+          // CRITICAL: Do NOT show Username setup on error. That would treat existing users as new users!
+          setAuthError('Could not verify profile from Firestore. Please check your connection.');
+          setNeedsUsernameModal(false);
+          setIsProfileLoading(false);
+          return null;
+        }
+
+        // Check if an existing profile document is found in users/{uid}
+        if (userSnap.exists()) {
+          const data = userSnap.data() as UserProfile;
+          if (!data.name) {
+            data.name = (data as any).displayName || data.username;
+          }
+
+          // Check if this is an existing completed profile (Rule 1 & Rule 3)
+          if (isCompletedUserProfile(data)) {
+            // 1. EXISTING USER:
+            // -> Directly open app / Home
+            // -> Do NOT show Username/Name setup
+            // -> Do NOT create a new profile
+            // -> Do NOT change/reset any existing data
+            const isStrikeOwner = 
+              data.username?.toLowerCase() === 'strike' ||
+              data.normalizedUsername === 'strike' ||
+              data.name?.toLowerCase() === 'strike' ||
+              user.displayName?.toLowerCase() === 'strike';
+
+            if (isStrikeOwner && data.role !== 'admin') {
+              data.role = 'admin';
+              updateDoc(userDocRef, { role: 'admin' }).catch(() => {});
+            }
+
+            setUserProfile(data);
+            setNeedsUsernameModal(false);
+            setAuthError(null);
+            setIsProfileLoading(false);
+            return data;
+          }
+        }
+
+        // 2. NEW USER:
+        // No existing completed profile exists for this Firebase UID
+        // -> Show Username + Name setup
+        setUserProfile(null);
+        setNeedsUsernameModal(true);
+        setAuthError(null);
+        setIsProfileLoading(false);
+        return null;
+      } catch (err: any) {
+        console.warn('[Auth] Unexpected error during profile verification:', err);
+        setAuthError('An error occurred verifying your profile.');
+        setNeedsUsernameModal(false);
+        setIsProfileLoading(false);
+        return null;
+      } finally {
+        inFlightFetchesRef.current.delete(user.uid);
+      }
+    })();
+
+    inFlightFetchesRef.current.set(user.uid, fetchPromise);
+    return fetchPromise;
   };
 
   useEffect(() => {
@@ -146,7 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (user) {
-        await fetchUserProfile(user);
+        await checkAndFetchUserProfile(user);
 
         // Real-time listener for instantaneous permission and role synchronization
         const userDocRef = doc(db, 'users', user.uid);
@@ -154,10 +222,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (snap.exists()) {
             const data = snap.data() as UserProfile;
             if (!data.name) {
-              data.name = data.username;
+              data.name = (data as any).displayName || data.username;
             }
-            setUserProfile(data);
-            setNeedsUsernameModal(false);
+            if (isCompletedUserProfile(data)) {
+              setUserProfile(data);
+              setNeedsUsernameModal(false);
+            }
           }
         }, (err) => {
           console.warn('Real-time user snapshot notice:', err);
@@ -165,6 +235,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUserProfile(null);
         setNeedsUsernameModal(false);
+        setIsProfileLoading(false);
       }
       setLoading(false);
     });
@@ -177,7 +248,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = async () => {
     if (currentUser) {
-      await fetchUserProfile(currentUser);
+      await checkAndFetchUserProfile(currentUser);
     }
   };
 
@@ -230,6 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role: initialRole,
         createdAt: realCreationTime || Date.now(),
         bio: '',
+        profileSetupComplete: true, // Marked completed upon registration
       };
 
       if (profilePhoto && typeof profilePhoto === 'string' && profilePhoto.trim().length > 0) {
@@ -279,7 +351,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await updateProfile(cred.user, { 
         displayName: (name && name.trim()) ? stripSpoofedRoleTags(name.trim()) : username 
       }).catch(() => {});
-      await fetchUserProfile(cred.user);
+      await checkAndFetchUserProfile(cred.user);
     } catch (err: any) {
       await cred.user.delete().catch(() => {});
       throw err;
@@ -289,7 +361,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logInWithEmail = async (email: string, pass: string) => {
     setAuthError(null);
     const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
-    await fetchUserProfile(cred.user);
+    await checkAndFetchUserProfile(cred.user);
   };
 
   const logInWithGoogle = async () => {
@@ -297,15 +369,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const cred = await signInWithPopup(auth, googleProvider);
       if (cred.user) {
-        await fetchUserProfile(cred.user);
+        await checkAndFetchUserProfile(cred.user);
       }
     } catch (err: any) {
-      console.error('Google Sign-in error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
         throw new Error('Google sign-in popup was closed.');
       } else if (err.code === 'auth/popup-blocked') {
         throw new Error('Popup blocked by browser. Please allow popups for this site.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        console.warn('Google sign-in unauthorized domain:', err);
+        const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+        const errWithCode = new Error(
+          `Domain "${hostname}" is not authorized for Google Sign-In in Firebase. Please add "${hostname}" to Authorized Domains in your Firebase Console (Authentication > Settings > Authorized Domains).`
+        );
+        (errWithCode as any).code = 'auth/unauthorized-domain';
+        throw errWithCode;
       } else {
+        console.warn('Google sign-in warning:', err);
         throw new Error(err.message || 'Could not authenticate with Google.');
       }
     }
@@ -323,7 +403,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const finalName = name || currentUser.displayName || username;
     await validateAndClaimUsername(currentUser.uid, username, currentUser.email || '', finalName, creationTime, profilePhoto);
     await updateProfile(currentUser, { displayName: stripSpoofedRoleTags(finalName) || finalName }).catch(() => {});
-    await fetchUserProfile(currentUser);
+    await checkAndFetchUserProfile(currentUser);
     setNeedsUsernameModal(false);
   };
 
@@ -387,13 +467,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await updateProfile(currentUser, { displayName: cleanUpdates.name }).catch(() => {});
     }
 
-    await fetchUserProfile(currentUser);
+    await checkAndFetchUserProfile(currentUser);
   };
 
   const logOut = async () => {
     await signOut(auth);
+    setCurrentUser(null);
     setUserProfile(null);
     setNeedsUsernameModal(false);
+    setIsProfileLoading(false);
+    setAuthError(null);
   };
 
   const resetPassword = async (email: string) => {
@@ -443,6 +526,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         currentUser,
         userProfile,
         loading,
+        isProfileLoading,
         needsUsernameModal,
         authError,
         isAdmin,

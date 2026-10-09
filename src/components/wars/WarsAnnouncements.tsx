@@ -26,6 +26,7 @@ import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { WarsAnnouncement, WarsCategory } from '../../types';
 import { stripSpoofedRoleTags } from '../../lib/validation';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 
 interface WarsAnnouncementsProps {
   gameType?: WarsCategory;
@@ -48,6 +49,11 @@ export const WarsAnnouncements: React.FC<WarsAnnouncementsProps> = ({ gameType =
   const [formImportant, setFormImportant] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete modal state
+  const [deleteTarget, setDeleteTarget] = useState<WarsAnnouncement | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isBedwars = gameType === 'bedwars';
 
@@ -96,19 +102,30 @@ export const WarsAnnouncements: React.FC<WarsAnnouncementsProps> = ({ gameType =
     setIsModalOpen(true);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = (item: WarsAnnouncement, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAdmin) return;
-    if (!confirm('Are you sure you want to delete this announcement?')) return;
+    setDeleteTarget(item);
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !isAdmin) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
 
     try {
-      await deleteDoc(doc(db, 'wars_announcements', id));
-      if (selectedAnnouncement?.id === id) {
+      await deleteDoc(doc(db, 'wars_announcements', deleteTarget.id));
+      if (selectedAnnouncement?.id === deleteTarget.id) {
         setSelectedAnnouncement(null);
       }
+      setDeleteTarget(null);
     } catch (err: any) {
       console.error('Failed to delete announcement:', err);
-      alert('Delete failed: ' + err.message);
+      setDeleteError(err.message || 'Failed to delete announcement.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -251,7 +268,7 @@ export const WarsAnnouncements: React.FC<WarsAnnouncementsProps> = ({ gameType =
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={(e) => handleDelete(item.id, e)}
+                      onClick={(e) => handleDelete(item, e)}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
                       title="Delete Announcement"
                     >
@@ -436,6 +453,24 @@ export const WarsAnnouncements: React.FC<WarsAnnouncementsProps> = ({ gameType =
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal for Announcements */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTarget}
+        title="Confirm Announcement Deletion"
+        itemTypeLabel="War Announcement"
+        itemName={deleteTarget?.title || ''}
+        warningText="Are you sure you want to permanently delete this announcement? This action cannot be undone."
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeleting}
+        errorMessage={deleteError}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => {
+          setDeleteTarget(null);
+          setDeleteError(null);
+        }}
+      />
     </div>
   );
 };

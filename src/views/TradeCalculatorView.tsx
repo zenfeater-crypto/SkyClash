@@ -22,7 +22,9 @@ import {
   FileText,
   Save,
   HelpCircle,
-  Lock
+  Lock,
+  Zap,
+  Tag
 } from 'lucide-react';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -30,7 +32,7 @@ import { useItems } from '../context/ItemsContext';
 import { usePets } from '../context/PetsContext';
 import { useUserData } from '../context/UserDataContext';
 import { useAuth } from '../context/AuthContext';
-import { TradeItemSlot, SkyblockItem, PetTier, SkyblockPet, TradePostItem, UserRole } from '../types';
+import { TradeItemSlot, SkyblockItem, PetTier, SkyblockPet, TradePostItem, UserRole, TradePostTag } from '../types';
 import { formatCoins, formatFullCoins } from '../lib/formatters';
 import { getStatusBadge, parseCoinStringToNumber } from '../lib/itemHelpers';
 import { petToSkyblockItem } from '../data/initialPets';
@@ -178,6 +180,13 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   const [postNote, setPostNote] = useState('');
+  const [selectedTags, setSelectedTags] = useState<TradePostTag[]>([]);
+
+  const toggleTag = (tag: TradePostTag) => {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
 
   // Trade history save notification
   const [historySaveSuccess, setHistorySaveSuccess] = useState(false);
@@ -336,6 +345,7 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
     setYourOffer([]);
     setTheirOffer([]);
     setPostNote('');
+    setSelectedTags([]);
   };
 
   // Open Preview Modal with Validation
@@ -415,6 +425,9 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
         differenceDirection,
         status: 'OPEN' as const,
         note: postNote.trim() || undefined,
+        tags: selectedTags,
+        isUrgent: selectedTags.includes('urgent'),
+        isLookingFor: selectedTags.includes('looking_for'),
       };
 
       await addDoc(collection(db, 'trade_posts'), sanitizeForFirestore(tradePostData));
@@ -942,6 +955,56 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
         </div>
       </div>
 
+      {/* Trade Offer Highlights / Temporary Tags */}
+      {currentUser && (
+        <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-center gap-2.5">
+            <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+              <Tag className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>Trade Offer Tags</span>
+                <span className="text-[10px] text-slate-500 font-mono font-normal">(Temporary)</span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Add high-visibility badges to your listing in the Trade Feed.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => toggleTag('urgent')}
+              className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
+                selectedTags.includes('urgent')
+                  ? 'bg-rose-500/20 border-rose-500/60 text-rose-300 shadow-sm shadow-rose-500/25 ring-1 ring-rose-500/30'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-rose-300 hover:border-slate-700'
+              }`}
+            >
+              <Zap className={`w-3.5 h-3.5 ${selectedTags.includes('urgent') ? 'text-rose-400 fill-rose-400 animate-pulse' : 'text-slate-400'}`} />
+              <span>⚡ Urgent</span>
+              {selectedTags.includes('urgent') && <Check className="w-3 h-3 text-rose-400" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleTag('looking_for')}
+              className={`px-3.5 py-2 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
+                selectedTags.includes('looking_for')
+                  ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/25 ring-1 ring-cyan-500/30'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-slate-700'
+              }`}
+            >
+              <Search className="w-3.5 h-3.5 text-cyan-400" />
+              <span>🔍 Looking For</span>
+              {selectedTags.includes('looking_for') && <Check className="w-3 h-3 text-cyan-400" />}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ============================================================ */}
       {/* 4. POST MY TRADE (Section 9)                                 */}
       {/* ============================================================ */}
@@ -1117,6 +1180,43 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
                   <span className="font-black text-amber-300">
                     {roundedPercentage}% {differenceDirection === 'up' ? '↑' : differenceDirection === 'down' ? '↓' : ''}
                   </span>
+                </div>
+              </div>
+
+              {/* Trade Tags selector inside Preview */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] text-slate-400 font-semibold flex items-center justify-between">
+                  <span>Trade Tags (Optional Highlight)</span>
+                  <span className="text-[10px] text-slate-500 font-mono">Appears on Trade Feed</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleTag('urgent')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      selectedTags.includes('urgent')
+                        ? 'bg-rose-500/20 border-rose-500/60 text-rose-300 shadow-sm shadow-rose-500/25'
+                        : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-rose-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <Zap className={`w-3.5 h-3.5 ${selectedTags.includes('urgent') ? 'text-rose-400 fill-rose-400 animate-pulse' : 'text-slate-400'}`} />
+                    <span>⚡ Urgent</span>
+                    {selectedTags.includes('urgent') && <Check className="w-3 h-3 text-rose-400 ml-auto" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleTag('looking_for')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                      selectedTags.includes('looking_for')
+                        ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 shadow-sm shadow-cyan-500/25'
+                        : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-cyan-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <Search className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>🔍 Looking For</span>
+                    {selectedTags.includes('looking_for') && <Check className="w-3 h-3 text-cyan-400 ml-auto" />}
+                  </button>
                 </div>
               </div>
 

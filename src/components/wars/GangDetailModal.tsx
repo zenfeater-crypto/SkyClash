@@ -32,6 +32,7 @@ import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { WarsGang, WarsGangMember, UserRole } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { stripSpoofedRoleTags } from '../../lib/validation';
 import { GangMenuModal } from './GangMenuModal';
 import { GangAllMembersModal } from './GangAllMembersModal';
@@ -81,6 +82,16 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
   const [editStatus, setEditStatus] = useState<'active' | 'recruiting' | 'archived'>(gang.status || 'active');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Delete gang confirmation modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isDeletingGang, setIsDeletingGang] = useState(false);
+  const [deleteGangError, setDeleteGangError] = useState<string | null>(null);
+
+  // Delete member confirmation modal state
+  const [deleteMemberTarget, setDeleteMemberTarget] = useState<{ uid: string; username: string } | null>(null);
+  const [isDeletingMember, setIsDeletingMember] = useState(false);
+  const [deleteMemberError, setDeleteMemberError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -157,46 +168,64 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
     }
   };
 
-  // Handler to remove a member
-  const handleRemoveMember = async (memberUid: string, memberUsername: string) => {
+  // Handler to remove a member (opens confirmation dialog)
+  const handleRemoveMember = (memberUid: string, memberUsername: string) => {
     if (!canManageMembers) return;
     if (memberUid === gang.leaderUid && !isAdmin) {
       alert("Gang leader cannot be removed. Only Owner Admin can change the leader.");
       return;
     }
+    setDeleteMemberTarget({ uid: memberUid, username: memberUsername });
+    setDeleteMemberError(null);
+  };
 
-    if (!confirm(`Are you sure you want to remove @${memberUsername} from ${gang.name}?`)) {
-      return;
-    }
+  const handleConfirmRemoveMember = async () => {
+    if (!deleteMemberTarget) return;
+
+    setIsDeletingMember(true);
+    setDeleteMemberError(null);
 
     try {
-      const updatedMembers = (gang.members || []).filter((m) => m.uid !== memberUid);
-      const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== memberUid);
+      const updatedMembers = (gang.members || []).filter((m) => m.uid !== deleteMemberTarget.uid);
+      const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== deleteMemberTarget.uid);
 
       await updateDoc(doc(db, 'wars_gangs', gang.id), {
         members: updatedMembers,
         memberUids: updatedMemberUids,
         updatedAt: Date.now()
       });
+
+      setDeleteMemberTarget(null);
     } catch (err: any) {
       console.error('Error removing member:', err);
-      alert('Failed to remove member: ' + err.message);
+      setDeleteMemberError(err.message || 'Failed to remove member.');
+    } finally {
+      setIsDeletingMember(false);
     }
   };
 
-  // Admin delete gang
-  const handleDeleteGang = async () => {
+  // Admin delete gang (opens confirmation modal)
+  const handleDeleteGang = () => {
     if (!isAdmin) return;
-    if (!confirm(`ADMIN ACTION: Are you sure you want to permanently delete gang "${gang.name}"?`)) {
-      return;
-    }
+    setIsDeleteModalOpen(true);
+    setDeleteGangError(null);
+  };
+
+  const handleConfirmDeleteGang = async () => {
+    if (!isAdmin) return;
+
+    setIsDeletingGang(true);
+    setDeleteGangError(null);
 
     try {
       await deleteDoc(doc(db, 'wars_gangs', gang.id));
+      setIsDeleteModalOpen(false);
       onClose();
     } catch (err: any) {
       console.error('Error deleting gang:', err);
-      alert('Failed to delete gang: ' + err.message);
+      setDeleteGangError(err.message || 'Failed to delete gang.');
+    } finally {
+      setIsDeletingGang(false);
     }
   };
 
@@ -660,6 +689,42 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
           }}
         />
       )}
+
+      {/* Delete Confirmation Modal for Gang */}
+      <DeleteConfirmModal
+        isOpen={isDeleteModalOpen}
+        title="Confirm Gang Deletion"
+        itemTypeLabel="Combat Gang"
+        itemName={gang.name}
+        warningText={`Are you sure you want to permanently delete gang "${gang.name}"? This will dissolve the gang and remove all member associations. This action cannot be undone.`}
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingGang}
+        errorMessage={deleteGangError}
+        onConfirm={handleConfirmDeleteGang}
+        onCancel={() => {
+          setIsDeleteModalOpen(false);
+          setDeleteGangError(null);
+        }}
+      />
+
+      {/* Delete Confirmation Modal for Removing Member */}
+      <DeleteConfirmModal
+        isOpen={!!deleteMemberTarget}
+        title="Remove Gang Member"
+        itemTypeLabel="Gang Member"
+        itemName={deleteMemberTarget ? `@${deleteMemberTarget.username}` : ''}
+        warningText={`Are you sure you want to remove @${deleteMemberTarget?.username} from ${gang.name}?`}
+        confirmButtonText="Confirm Remove"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingMember}
+        errorMessage={deleteMemberError}
+        onConfirm={handleConfirmRemoveMember}
+        onCancel={() => {
+          setDeleteMemberTarget(null);
+          setDeleteMemberError(null);
+        }}
+      />
     </div>
   );
 };

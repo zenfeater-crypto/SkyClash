@@ -38,7 +38,14 @@
         "muteReason": { "type": "string" },
         "lastWorldChatAt": { "type": "number" },
         "lastChatMessageNorm": { "type": "string" },
-        "sameMessageCount": { "type": "number" }
+        "sameMessageCount": { "type": "number" },
+        "profileSetupComplete": { "type": "boolean" },
+        "coinBalance": { "type": "number" },
+        "loginStreak": { "type": "number" },
+        "lastRewardClaimDate": { "type": "string" },
+        "lastRewardClaimTimestamp": { "type": "number" },
+        "rewardCycleDay": { "type": "number" },
+        "lastChallengePostAt": { "type": "number" }
       },
       "required": ["uid", "username", "normalizedUsername", "role", "createdAt"]
     },
@@ -184,7 +191,10 @@
         "differencePercentage": { "type": "number" },
         "status": { "type": "string", "enum": ["OPEN", "COMPLETED", "CANCELLED"] },
         "note": { "type": "string" },
-        "expiresAt": { "type": "number" }
+        "expiresAt": { "type": "number" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "isUrgent": { "type": "boolean" },
+        "isLookingFor": { "type": "boolean" }
       },
       "required": ["posterUid", "posterUsername", "createdAt", "expiresAt", "status"]
     },
@@ -401,6 +411,92 @@
         "timestamp": { "type": "number" }
       },
       "required": ["action", "targetUserUid", "targetUsername", "adminUid", "adminUsername", "timestamp"]
+    },
+    "midManPost": {
+      "title": "MidManPost",
+      "description": "Verified Middle Man trade listing created and managed exclusively by Owner Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string", "enum": ["account_trades", "upi_trade"] },
+        "targetUserUid": { "type": "string" },
+        "appUsername": { "type": "string" },
+        "appDisplayName": { "type": "string" },
+        "gameUsername": { "type": "string" },
+        "profilePhoto": { "type": "string" },
+        "description": { "type": "string" },
+        "charges": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "createdByAdminUid": { "type": "string" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["category", "targetUserUid", "appUsername", "gameUsername", "description", "charges", "createdAt", "createdByAdminUid"]
+    },
+    "soloDuoChallenge": {
+      "title": "SoloDuoChallenge",
+      "description": "Solo vs Solo or Duo vs Duo challenge post expiring in 12 hours with 250 coins fee",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "gameType": { "type": "string", "enum": ["skyblock", "bedwars"] },
+        "matchType": { "type": "string", "enum": ["solo_vs_solo", "duo_vs_duo"] },
+        "creatorUid": { "type": "string" },
+        "creatorUsername": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "creatorAvatarUrl": { "type": "string" },
+        "creatorProfilePhoto": { "type": "string" },
+        "creatorRole": { "type": "string" },
+        "creatorProfileFrameId": { "type": "string" },
+        "creatorTextFrameId": { "type": "string" },
+        "gameUsername": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" }
+      },
+      "required": ["gameType", "matchType", "creatorUid", "creatorUsername", "gameUsername", "description", "createdAt", "expiresAt"]
+    },
+    "tournament": {
+      "title": "Tournament",
+      "description": "Competitive tournament created and managed exclusively by Owner Admin Strike",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "bannerUrl": { "type": "string" },
+        "category": { "type": "string", "enum": ["skyblock", "bedwars"] },
+        "dateAndTiming": { "type": "string" },
+        "registeredCount": { "type": "number" },
+        "maxPlayers": { "type": "number" },
+        "winningAmount": { "type": "string" },
+        "entryFee": { "type": "string" },
+        "description": { "type": "string" },
+        "isPublished": { "type": "boolean" },
+        "registeredUserUids": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "createdByAdminUid": { "type": "string" },
+        "createdByUsername": { "type": "string" }
+      },
+      "required": ["name", "bannerUrl", "category", "dateAndTiming", "registeredCount", "maxPlayers", "winningAmount", "entryFee", "isPublished", "createdAt", "createdByAdminUid"]
+    },
+    "tournamentRegistration": {
+      "title": "TournamentRegistration",
+      "description": "Official player registration added exclusively by Owner Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "tournamentName": { "type": "string" },
+        "userUid": { "type": "string" },
+        "appUsername": { "type": "string" },
+        "displayName": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "registeredAt": { "type": "number" },
+        "registeredByAdminUid": { "type": "string" },
+        "registeredByUsername": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["tournamentId", "userUid", "appUsername", "displayName", "registeredAt", "registeredByAdminUid"]
     }
   },
   "firestore": {
@@ -483,6 +579,22 @@
     "/frameAudit/{auditId}": {
       "schema": "frameAuditLog",
       "description": "Audit records of Owner Admin frame assignments"
+    },
+    "/midman_posts/{postId}": {
+      "schema": "midManPost",
+      "description": "Verified Middle Man trade listings managed by Owner Admin"
+    },
+    "/solo_duo_challenges/{challengeId}": {
+      "schema": "soloDuoChallenge",
+      "description": "Public 1v1 and 2v2 combat challenge feed with 12h expiry"
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "tournament",
+      "description": "Official competitive tournaments managed exclusively by Owner Admin Strike"
+    },
+    "/tournament_registrations/{regId}": {
+      "schema": "tournamentRegistration",
+      "description": "Player tournament registrations managed exclusively by Owner Admin Strike"
     }
   }
 }

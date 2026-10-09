@@ -27,6 +27,7 @@ import { WarsGang, WarsGangMessage } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
 import { MessageTextFrame } from '../MessageTextFrame';
 import { stripSpoofedRoleTags } from '../../lib/validation';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 
 interface GangChatModalProps {
   gang: WarsGang;
@@ -46,6 +47,12 @@ export const GangChatModal: React.FC<GangChatModalProps> = ({
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Delete message confirmation modal state
+  const [deleteTargetMsg, setDeleteTargetMsg] = useState<WarsGangMessage | null>(null);
+  const [isDeletingMsg, setIsDeletingMsg] = useState(false);
+  const [deleteMsgError, setDeleteMsgError] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Check membership
@@ -155,12 +162,26 @@ export const GangChatModal: React.FC<GangChatModalProps> = ({
     }
   };
 
-  const handleDeleteMessage = async (messageId: string) => {
+  const handleDeleteMessage = (msg: WarsGangMessage) => {
     if (!isAdmin) return;
+    setDeleteTargetMsg(msg);
+    setDeleteMsgError(null);
+  };
+
+  const handleConfirmDeleteMessage = async () => {
+    if (!deleteTargetMsg || !isAdmin) return;
+
+    setIsDeletingMsg(true);
+    setDeleteMsgError(null);
+
     try {
-      await deleteDoc(doc(db, 'wars_gangs', gang.id, 'messages', messageId));
-    } catch (err) {
+      await deleteDoc(doc(db, 'wars_gangs', gang.id, 'messages', deleteTargetMsg.id));
+      setDeleteTargetMsg(null);
+    } catch (err: any) {
       console.error('Failed to delete gang message:', err);
+      setDeleteMsgError(err.message || 'Failed to delete message.');
+    } finally {
+      setIsDeletingMsg(false);
     }
   };
 
@@ -326,7 +347,7 @@ export const GangChatModal: React.FC<GangChatModalProps> = ({
 
                     {isAdmin && (
                       <button
-                        onClick={() => handleDeleteMessage(msg.id)}
+                        onClick={() => handleDeleteMessage(msg)}
                         className="text-[10px] text-rose-400 hover:text-rose-300 opacity-0 group-hover:opacity-100 transition mt-1"
                       >
                         Delete as Admin
@@ -365,6 +386,24 @@ export const GangChatModal: React.FC<GangChatModalProps> = ({
           </form>
         )}
       </div>
+
+      {/* Delete Confirmation Modal for Gang Chat Messages */}
+      <DeleteConfirmModal
+        isOpen={!!deleteTargetMsg}
+        title="Confirm Message Deletion"
+        itemTypeLabel="Gang Chat Message"
+        itemName={deleteTargetMsg ? `"${deleteTargetMsg.text.slice(0, 40)}${deleteTargetMsg.text.length > 40 ? '...' : ''}" by @${deleteTargetMsg.senderUsername}` : ''}
+        warningText="Are you sure you want to delete this gang chat message? This action cannot be undone."
+        confirmButtonText="Confirm Delete"
+        cancelButtonText="Cancel"
+        isDeleting={isDeletingMsg}
+        errorMessage={deleteMsgError}
+        onConfirm={handleConfirmDeleteMessage}
+        onCancel={() => {
+          setDeleteTargetMsg(null);
+          setDeleteMsgError(null);
+        }}
+      />
     </div>
   );
 };

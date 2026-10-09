@@ -9,6 +9,7 @@ import {
   Heart, 
   History, 
   ShieldAlert, 
+  ShieldCheck,
   LogIn, 
   LogOut,
   User as UserIcon,
@@ -25,6 +26,7 @@ import { stripSpoofedRoleTags } from '../lib/validation';
 export type NavTab = 
   | 'home' 
   | 'valuelist' 
+  | 'midman'
   | 'tradefeed'
   | 'calculator' 
   | 'itemdetail' 
@@ -92,6 +94,18 @@ export const Navbar: React.FC<NavigationProps> = ({ currentTab, onTabChange, onO
           >
             <ListFilter className="w-3.5 h-3.5" />
             <span>Value List</span>
+          </button>
+
+          <button
+            onClick={() => onTabChange('midman')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 ${
+              currentTab === 'midman'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                : 'text-amber-400/90 hover:text-amber-300 hover:bg-amber-950/30'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            <span>Mid Man</span>
           </button>
 
           <button
@@ -280,6 +294,16 @@ export const MobileBottomNav: React.FC<NavigationProps> = ({ currentTab, onTabCh
         </button>
 
         <button
+          onClick={() => onTabChange('midman')}
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-[10px] font-medium transition ${
+            currentTab === 'midman' ? 'text-amber-400 font-bold' : 'text-slate-400 hover:text-amber-300'
+          }`}
+        >
+          <ShieldCheck className="w-4 h-4 text-amber-400" />
+          <span>MM</span>
+        </button>
+
+        <button
           onClick={() => onTabChange('tradefeed')}
           className={`flex flex-col items-center gap-1 py-1 px-2.5 rounded-xl text-[10px] font-bold transition ${
             currentTab === 'tradefeed' 
@@ -294,16 +318,6 @@ export const MobileBottomNav: React.FC<NavigationProps> = ({ currentTab, onTabCh
         </button>
 
         <button
-          onClick={() => onTabChange('worldchat')}
-          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-[10px] font-medium transition ${
-            currentTab === 'worldchat' ? 'text-cyan-400' : 'text-slate-400'
-          }`}
-        >
-          <MessageSquare className="w-4 h-4" />
-          <span>Chat</span>
-        </button>
-
-        <button
           onClick={() => onTabChange('wars')}
           className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-[10px] font-bold transition ${
             currentTab === 'wars' ? 'text-amber-400' : 'text-slate-400 hover:text-amber-300'
@@ -311,6 +325,16 @@ export const MobileBottomNav: React.FC<NavigationProps> = ({ currentTab, onTabCh
         >
           <Swords className="w-4 h-4 text-amber-400" />
           <span>Wars</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange('worldchat')}
+          className={`flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-[10px] font-medium transition ${
+            currentTab === 'worldchat' ? 'text-cyan-400' : 'text-slate-400'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          <span>Chat</span>
         </button>
 
         <button

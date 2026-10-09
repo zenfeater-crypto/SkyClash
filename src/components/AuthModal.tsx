@@ -12,7 +12,10 @@ import {
   ArrowLeft,
   Sparkles,
   Camera,
-  X
+  X,
+  Copy,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import { validateUsername, processProfileImageFile } from '../lib/validation';
 
@@ -40,11 +43,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   const [displayName, setDisplayName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
+  const [domainCopied, setDomainCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
+
+  const handleCopyDomain = (domainToCopy: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(domainToCopy).then(() => {
+        setDomainCopied(true);
+        setTimeout(() => setDomainCopied(false), 2500);
+      }).catch(() => {});
+    }
+  };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -69,6 +83,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
+    setUnauthorizedDomain(null);
     setSuccessMsg(null);
     clearError();
 
@@ -126,6 +141,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
   const handleGoogleLogin = async () => {
     setLocalError(null);
+    setUnauthorizedDomain(null);
     setSuccessMsg(null);
     clearError();
     setLoading(true);
@@ -133,7 +149,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       await logInWithGoogle();
       onClose();
     } catch (err: any) {
-      setLocalError(err.message || 'Google sign in failed.');
+      const isUnauthorizedDomain = 
+        err.code === 'auth/unauthorized-domain' ||
+        (typeof err.message === 'string' && (
+          err.message.includes('auth/unauthorized-domain') ||
+          err.message.includes('not authorized for Google Sign-In')
+        ));
+
+      if (isUnauthorizedDomain) {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'current-domain';
+        setUnauthorizedDomain(host);
+      } else {
+        setLocalError(err.message || 'Google sign in failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -171,7 +199,58 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
         </div>
 
         {/* Display Errors / Notices */}
-        {(localError || authError) && (
+        {unauthorizedDomain && (
+          <div className="mb-4 p-4 bg-amber-950/50 border border-amber-500/50 rounded-2xl text-amber-200 text-xs space-y-2.5 shadow-lg animate-in fade-in duration-200">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-300">Firebase Authorized Domain Needed</p>
+                <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                  Google Sign-In requires your current app domain to be added to Firebase Console under{' '}
+                  <span className="font-semibold text-white">Authentication &rarr; Settings &rarr; Authorized domains</span>.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-amber-500/30 rounded-xl px-3 py-2 font-mono text-[11px] text-amber-100">
+              <span className="truncate select-all text-xs">{unauthorizedDomain}</span>
+              <button
+                type="button"
+                onClick={() => handleCopyDomain(unauthorizedDomain)}
+                className="inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 font-sans font-semibold text-[10px] transition cursor-pointer"
+              >
+                {domainCopied ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-400" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3" />
+                    <span>Copy Domain</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[11px]">
+              <a
+                href="https://console.firebase.google.com/project/helical-shoreline-xcb1c/authentication/settings"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline font-medium"
+              >
+                <span>Open Firebase Settings</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              <span className="text-[10px] text-slate-400">
+                Or sign up / log in with email below
+              </span>
+            </div>
+          </div>
+        )}
+
+        {(localError || authError) && !unauthorizedDomain && (
           <div className="mb-4 p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{localError || authError}</span>
@@ -440,6 +519,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
               <ArrowLeft className="w-3.5 h-3.5" /> Back to Login
             </button>
           )}
+
+          <div className="mt-4 pt-3 border-t border-slate-800/80">
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-xs text-slate-400 hover:text-slate-200 transition underline underline-offset-4 cursor-pointer"
+            >
+              Continue as Guest / Explore App
+            </button>
+          </div>
         </div>
       </div>
     </div>

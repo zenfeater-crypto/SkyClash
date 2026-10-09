@@ -4,7 +4,9 @@ import {
   getFirestore, 
   initializeFirestore, 
   persistentLocalCache, 
-  persistentMultipleTabManager 
+  persistentMultipleTabManager,
+  doc,
+  getDocFromServer
 } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
@@ -44,3 +46,15 @@ try {
 export const db = dbInstance;
 export const databaseId = firebaseConfig.databaseId;
 export const projectId = firebaseConfig.projectId;
+
+async function testConnection() {
+  try {
+    await getDocFromServer(doc(db, 'test', 'connection'));
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration.");
+    }
+  }
+}
+testConnection();
+
