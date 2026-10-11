@@ -6,8 +6,8 @@
  *    - Profile Frame: Golden circular profile-frame asset
  *    - Text Frame: Golden decorative rectangular text/message-frame asset
  * 2. OVERLORD (Premium):
- *    - Profile Frame: Diamond circular profile-frame asset
- *    - Text Frame: Diamond/shiny rectangular text/message-frame asset
+ *    - Profile Frame: Silver metallic circular profile-frame asset
+ *    - Text Frame: Silver metallic rectangular text/message-frame asset
  * 3. SUPREME (VIP Members):
  *    - Profile Frame: Purple circular/radiant profile-frame asset
  *    - Text Frame: Purple decorative rectangular text/message-frame asset
@@ -178,54 +178,79 @@ const SUPREME_RECT_MESSAGE_FRAME_SVG = `data:image/svg+xml;utf8,${encodeURICompo
 const OVERLORD_CIRCULAR_FRAME_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
   <defs>
-    <linearGradient id="diamondGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#E0F7FA" />
-      <stop offset="30%" stop-color="#80DEEA" />
-      <stop offset="60%" stop-color="#FFD54F" />
-      <stop offset="100%" stop-color="#00838F" />
+    <!-- Multi-stop high-polish metallic silver gradient -->
+    <linearGradient id="silverGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="20%" stop-color="#E2E8F0" />
+      <stop offset="40%" stop-color="#94A3B8" />
+      <stop offset="55%" stop-color="#FFFFFF" />
+      <stop offset="70%" stop-color="#CBD5E1" />
+      <stop offset="85%" stop-color="#64748B" />
+      <stop offset="100%" stop-color="#E2E8F0" />
     </linearGradient>
-    <filter id="diamondGlow">
+    <filter id="silverGlow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur stdDeviation="3.5" result="blur" />
       <feComposite in="SourceGraphic" in2="blur" operator="over" />
     </filter>
   </defs>
-  <g filter="url(#diamondGlow)">
-    <circle cx="100" cy="100" r="65" fill="none" stroke="url(#diamondGrad)" stroke-width="4.5" stroke-dasharray="14 5" />
-    <!-- Diamond Crystals -->
-    <polygon points="100,26 105,32 100,38 95,32" fill="#E0F7FA" stroke="#006064" stroke-width="0.8" />
-    <polygon points="174,100 168,105 162,100 168,95" fill="#E0F7FA" stroke="#006064" stroke-width="0.8" />
-    <polygon points="100,174 105,168 100,162 95,168" fill="#E0F7FA" stroke="#006064" stroke-width="0.8" />
-    <polygon points="26,100 32,105 38,100 32,95" fill="#E0F7FA" stroke="#006064" stroke-width="0.8" />
+
+  <!-- Outer Silver Halo / Faceted Studs -->
+  <g filter="url(#silverGlow)">
+    <circle cx="100" cy="100" r="66" fill="none" stroke="url(#silverGrad)" stroke-width="4.5" stroke-dasharray="14 5" />
+    <!-- 8 Polished Silver Crystal Studs -->
+    <polygon points="100,24 106,32 100,40 94,32" fill="#FFFFFF" stroke="#64748B" stroke-width="0.8" />
+    <polygon points="176,100 168,106 160,100 168,94" fill="#FFFFFF" stroke="#64748B" stroke-width="0.8" />
+    <polygon points="100,176 106,168 100,160 94,168" fill="#FFFFFF" stroke="#64748B" stroke-width="0.8" />
+    <polygon points="24,100 32,106 40,100 32,94" fill="#FFFFFF" stroke="#64748B" stroke-width="0.8" />
+    <circle cx="152" cy="48" r="3.5" fill="#F8FAFC" stroke="#64748B" stroke-width="0.8" />
+    <circle cx="152" cy="152" r="3.5" fill="#F8FAFC" stroke="#64748B" stroke-width="0.8" />
+    <circle cx="48" cy="152" r="3.5" fill="#F8FAFC" stroke="#64748B" stroke-width="0.8" />
+    <circle cx="48" cy="48" r="3.5" fill="#F8FAFC" stroke="#64748B" stroke-width="0.8" />
   </g>
-  <circle cx="100" cy="100" r="59" fill="none" stroke="#082F3B" stroke-width="4" />
-  <circle cx="100" cy="100" r="56" fill="none" stroke="url(#diamondGrad)" stroke-width="2" />
+
+  <!-- Middle Polished Silver Ring -->
+  <circle cx="100" cy="100" r="60" fill="none" stroke="#1E293B" stroke-width="5" />
+  <!-- Inner Faceted Rim -->
+  <circle cx="100" cy="100" r="56" fill="none" stroke="url(#silverGrad)" stroke-width="2.5" />
+  <circle cx="100" cy="100" r="53" fill="none" stroke="#F1F5F9" stroke-width="0.8" opacity="0.8" stroke-dasharray="4 2" />
 </svg>`)}`;
 
 const OVERLORD_RECT_MESSAGE_FRAME_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120" preserveAspectRatio="none">
   <defs>
-    <linearGradient id="overlordBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#E0F7FA" />
-      <stop offset="35%" stop-color="#4DD0E1" />
-      <stop offset="65%" stop-color="#FFD54F" />
-      <stop offset="100%" stop-color="#0097A7" />
+    <!-- Polished Silver Border Gradient -->
+    <linearGradient id="silverBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="25%" stop-color="#CBD5E1" />
+      <stop offset="50%" stop-color="#FFFFFF" />
+      <stop offset="75%" stop-color="#94A3B8" />
+      <stop offset="100%" stop-color="#E2E8F0" />
     </linearGradient>
-    <linearGradient id="overlordBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#08232B" stop-opacity="0.95" />
-      <stop offset="50%" stop-color="#06151B" stop-opacity="0.98" />
-      <stop offset="100%" stop-color="#0A2832" stop-opacity="0.95" />
+    <!-- Silver-Midnight Metallic Background -->
+    <linearGradient id="silverBgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" stop-opacity="0.96" />
+      <stop offset="50%" stop-color="#090D16" stop-opacity="0.98" />
+      <stop offset="100%" stop-color="#141E33" stop-opacity="0.96" />
     </linearGradient>
   </defs>
-  <rect x="3" y="3" width="394" height="114" rx="8" fill="url(#overlordBgGrad)" stroke="url(#overlordBorderGrad)" stroke-width="2.5" />
-  <rect x="7" y="7" width="386" height="106" rx="6" fill="none" stroke="#4DD0E1" stroke-width="0.8" stroke-dasharray="5,3" opacity="0.6" />
-  <polygon points="4,4 18,4 18,7 7,7 7,18 4,18" fill="url(#overlordBorderGrad)" />
-  <circle cx="13" cy="13" r="2.5" fill="#E0F7FA" />
-  <polygon points="396,4 382,4 382,7 393,7 393,18 396,18" fill="url(#overlordBorderGrad)" />
-  <circle cx="387" cy="13" r="2.5" fill="#E0F7FA" />
-  <polygon points="4,116 18,116 18,113 7,113 7,102 4,102" fill="url(#overlordBorderGrad)" />
-  <circle cx="13" cy="107" r="2.5" fill="#E0F7FA" />
-  <polygon points="396,116 382,116 382,113 393,113 393,102 396,102" fill="url(#overlordBorderGrad)" />
-  <circle cx="387" cy="107" r="2.5" fill="#E0F7FA" />
+  <!-- Background Rect -->
+  <rect x="3" y="3" width="394" height="114" rx="8" fill="url(#silverBgGrad)" stroke="url(#silverBorderGrad)" stroke-width="2.5" />
+  <!-- Inner Silver Shimmer Hairline -->
+  <rect x="7" y="7" width="386" height="106" rx="6" fill="none" stroke="#E2E8F0" stroke-width="0.8" stroke-dasharray="6,3" opacity="0.75" />
+  <!-- Corner Ornaments (Top Left) -->
+  <polygon points="4,4 18,4 18,7 7,7 7,18 4,18" fill="url(#silverBorderGrad)" />
+  <circle cx="13" cy="13" r="2.5" fill="#FFFFFF" />
+  <!-- Corner Ornaments (Top Right) -->
+  <polygon points="396,4 382,4 382,7 393,7 393,18 396,18" fill="url(#silverBorderGrad)" />
+  <circle cx="387" cy="13" r="2.5" fill="#FFFFFF" />
+  <!-- Corner Ornaments (Bottom Left) -->
+  <polygon points="4,116 18,116 18,113 7,113 7,102 4,102" fill="url(#silverBorderGrad)" />
+  <circle cx="13" cy="107" r="2.5" fill="#FFFFFF" />
+  <!-- Corner Ornaments (Bottom Right) -->
+  <polygon points="396,116 382,116 382,113 393,113 393,102 396,102" fill="url(#silverBorderGrad)" />
+  <circle cx="387" cy="107" r="2.5" fill="#FFFFFF" />
+  <!-- Center Top Silver Diamond Accent -->
+  <polygon points="200,3 206,9 200,15 194,9" fill="#FFFFFF" stroke="#94A3B8" stroke-width="0.6" />
 </svg>`)}`;
 
 const VANGUARD_CIRCULAR_FRAME_SVG = `data:image/svg+xml;utf8,${encodeURIComponent(`

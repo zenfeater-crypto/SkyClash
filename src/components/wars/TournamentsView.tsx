@@ -17,6 +17,7 @@ import {
   Filter, 
   Sparkles, 
   AlertCircle, 
+  Crown,
   CheckCircle2, 
   Loader2, 
   Eye, 
@@ -42,7 +43,9 @@ import { useAuth } from '../../context/AuthContext';
 import { Tournament, TournamentCategory } from '../../types';
 import { AdminTournamentModal } from './AdminTournamentModal';
 import { AdminTournamentRegistrationModal } from './AdminTournamentRegistrationModal';
+import { TournamentJoinModal } from './TournamentJoinModal';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
+import { getTournamentEntryFeeCoins } from '../../lib/tournamentService';
 
 interface TournamentsViewProps {
   initialCategory?: TournamentCategory;
@@ -57,7 +60,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({
   onOpenPrivateChat,
   onBackToLanding,
 }) => {
-  const { currentUser, userProfile, isAdmin } = useAuth();
+  const { currentUser, userProfile, isAdmin, hasUnlimitedCoins } = useAuth();
 
   // Filters
   const [selectedCategory, setSelectedCategory] = useState<'all' | TournamentCategory>(
@@ -73,6 +76,7 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [tournamentToEdit, setTournamentToEdit] = useState<Tournament | null>(null);
   const [registrationTarget, setRegistrationTarget] = useState<Tournament | null>(null);
+  const [joinTarget, setJoinTarget] = useState<Tournament | null>(null);
 
   // Delete tournament confirmation modal state
   const [deleteTarget, setDeleteTarget] = useState<Tournament | null>(null);
@@ -314,6 +318,19 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({
           </div>
 
           <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+            {currentUser && (
+              <div className="px-4 py-2.5 rounded-2xl bg-slate-900/90 border border-amber-500/30 text-center shadow-lg shadow-amber-500/10">
+                <div className="text-lg font-black text-amber-400 font-mono flex items-center justify-center gap-1">
+                  <span>🪙</span>
+                  <span>{hasUnlimitedCoins ? '∞' : (userProfile?.coinBalance || 0).toLocaleString()}</span>
+                  {hasUnlimitedCoins && <Crown className="w-3.5 h-3.5 text-amber-400" />}
+                </div>
+                <div className="text-[10px] text-amber-300/80 uppercase font-mono font-bold">
+                  {hasUnlimitedCoins ? 'Unlimited 👑' : 'Your Balance'}
+                </div>
+              </div>
+            )}
+
             <div className="px-4 py-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-center">
               <div className="text-lg font-black text-amber-400 font-mono">
                 {filteredTournaments.length}
@@ -449,6 +466,12 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({
             const max = tournament.maxPlayers || 32;
             const percentFilled = Math.min(100, Math.round((currentRegistered / max) * 100));
             const isFull = currentRegistered >= max;
+            const entryFeeCoins = getTournamentEntryFeeCoins(tournament);
+            const isUserRegistered = Boolean(
+              currentUser &&
+              Array.isArray(tournament.registeredUserUids) &&
+              tournament.registeredUserUids.includes(currentUser.uid)
+            );
 
             return (
               <div
@@ -645,20 +668,107 @@ export const TournamentsView: React.FC<TournamentsViewProps> = ({
                   </div>
                 </div>
 
-                {/* 8. CHAT TO REGISTER BUTTON */}
-                <button
-                  type="button"
-                  onClick={() => handleChatToRegister(tournament)}
-                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:via-orange-400 hover:to-amber-500 text-slate-950 font-black text-sm tracking-wide uppercase shadow-xl shadow-amber-500/25 flex items-center justify-center gap-2.5 transition active:scale-[0.99] group/btn"
-                >
-                  <MessageSquare className="w-4 h-4 fill-slate-950 group-hover/btn:scale-110 transition" />
-                  <span>CHAT TO REGISTER</span>
-                  <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition" />
-                </button>
+                {/* USER AVAILABLE BALANCE PILL */}
+                {currentUser && (
+                  <div className="px-3.5 py-2.5 rounded-2xl bg-slate-950/70 border border-slate-800/90 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Available Balance:</span>
+                    </span>
+                    <span className="font-mono font-bold">
+                      {hasUnlimitedCoins ? (
+                        <span className="text-amber-400 flex items-center gap-1 font-black">
+                          <span>Unlimited</span>
+                          <Crown className="w-3.5 h-3.5" />
+                        </span>
+                      ) : (
+                        <span className="text-white">
+                          {(userProfile?.coinBalance ?? 0).toLocaleString()} coins
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
+
+                {/* 8. REGISTRATION ACTIONS */}
+                <div className="space-y-2 pt-1">
+                  {/* Primary: JOIN TOURNAMENT Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!currentUser) {
+                        onOpenAuth();
+                      } else {
+                        setJoinTarget(tournament);
+                      }
+                    }}
+                    disabled={isUserRegistered}
+                    className={`w-full py-3.5 px-4 rounded-2xl font-black text-sm tracking-wide uppercase shadow-xl flex items-center justify-center gap-2.5 transition active:scale-[0.99] group/btn ${
+                      isUserRegistered
+                        ? 'bg-slate-800/90 border border-emerald-500/40 text-emerald-400 cursor-default'
+                        : isFull
+                        ? 'bg-slate-800 border border-slate-700 text-slate-400 hover:border-slate-600'
+                        : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:via-orange-400 hover:to-amber-500 text-slate-950 shadow-amber-500/25'
+                    }`}
+                  >
+                    {isUserRegistered ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>REGISTERED</span>
+                      </>
+                    ) : isFull ? (
+                      <>
+                        <AlertCircle className="w-4 h-4 text-slate-400" />
+                        <span>ROSTER FULL (VIEW)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trophy className="w-4 h-4 text-slate-950 group-hover/btn:scale-110 transition" />
+                        <span>JOIN TOURNAMENT</span>
+                        <ArrowRight className="w-4 h-4 group-hover/btn:translate-x-1 transition" />
+                      </>
+                    )}
+                  </button>
+
+                  {/* Secondary: CHAT TO REGISTER */}
+                  <button
+                    type="button"
+                    onClick={() => handleChatToRegister(tournament)}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white font-mono text-xs flex items-center justify-center gap-2 transition"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Chat Strike (Owner Admin)</span>
+                  </button>
+                </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {/* Join Tournament Modal */}
+      {joinTarget && (
+        <TournamentJoinModal
+          isOpen={!!joinTarget}
+          onClose={() => setJoinTarget(null)}
+          tournament={joinTarget}
+          onOpenAuth={onOpenAuth}
+          onJoined={(res) => {
+            setNotification(`Successfully registered for "${res.tournamentName}"!`);
+            setTournaments((prev) =>
+              prev.map((t) =>
+                t.id === joinTarget.id
+                  ? {
+                      ...t,
+                      registeredCount: (t.registeredCount || 0) + 1,
+                      registeredUserUids: [...(t.registeredUserUids || []), currentUser?.uid || ''],
+                    }
+                  : t
+              )
+            );
+            setJoinTarget(null);
+          }}
+        />
       )}
 
       {/* Admin Tournament Create / Edit Modal */}

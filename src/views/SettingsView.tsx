@@ -362,11 +362,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 <div className="text-xs text-slate-400 mt-0.5">
                   {userProfile?.membership?.level === 'vip'
-                    ? 'SUPREME VIP tier active: Dark-purple circular aura, custom chat styling, ad-free, and exclusive Admin Talk.'
+                    ? 'SUPREME VIP tier active: Purple circular profile frame, purple text frame, ad-free, and exclusive Admin Talk.'
                     : userProfile?.membership?.level === 'premium'
-                    ? 'OVERLORD Premium tier active: Diamond-style circular frame, custom chat styling, ad-free, and exclusive Admin Talk.'
+                    ? 'OVERLORD Premium tier active: Silver metallic circular profile frame, silver text frame, ad-free, and exclusive Admin Talk.'
                     : userProfile?.membership?.level === 'premium_lite'
-                    ? 'VANGUARD Premium Lite tier active: Golden circular profile frame, golden chat glow, and ad-free experience.'
+                    ? 'VANGUARD Premium Lite tier active: Golden circular profile frame, golden text frame, and ad-free experience.'
                     : 'Upgrade tiers: VANGUARD, OVERLORD, and SUPREME are assigned exclusively by the Owner Admin.'}
                 </div>
               </div>

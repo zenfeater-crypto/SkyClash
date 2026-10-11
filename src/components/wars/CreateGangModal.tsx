@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, ShieldAlert, Crown, Users, Sparkles, AlertCircle } from 'lucide-react';
-import { collection, addDoc, query, where, getDocs, limit } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, limit, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { WarsGang, WarsGangMember, WarsCategory } from '../../types';
@@ -59,6 +59,15 @@ export const CreateGangModal: React.FC<CreateGangModalProps> = ({
       const leaderData = leaderDoc.data();
       const leaderUid = leaderDoc.id;
 
+      // 1. Backend validation: check if leader already belongs to ANY gang
+      const membershipRef = doc(db, 'gangMemberships', leaderUid);
+      const membershipSnap = await getDoc(membershipRef);
+      if (membershipSnap.exists()) {
+        setError(`@${cleanLeader} already belongs to a gang. A player can belong to only ONE gang across Skyblock and Bedwars.`);
+        setLoading(false);
+        return;
+      }
+
       const initialMember: WarsGangMember = {
         uid: leaderUid,
         username: stripSpoofedRoleTags(leaderData.username || cleanLeader),
@@ -89,6 +98,16 @@ export const CreateGangModal: React.FC<CreateGangModalProps> = ({
           rating: 1000,
           kills: 0
         }
+      });
+
+      // 2. Set atomic membership lock for the leader
+      await setDoc(membershipRef, {
+        uid: leaderUid,
+        gangId: gangDocRef.id,
+        gangName: name.trim(),
+        gameType: gameType,
+        role: 'leader',
+        joinedAt: Date.now()
       });
 
       onSuccess(gangDocRef.id);

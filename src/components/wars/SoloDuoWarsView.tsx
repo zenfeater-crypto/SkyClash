@@ -57,7 +57,7 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
   onOpenPrivateChat,
   onBackToLanding,
 }) => {
-  const { currentUser, userProfile, isAdmin } = useAuth();
+  const { currentUser, userProfile, isAdmin, hasUnlimitedCoins } = useAuth();
 
   // Active filters
   const [gameType, setGameType] = useState<SoloDuoGameType>(initialGameType);
@@ -184,9 +184,9 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
       return;
     }
 
-    // Check coin balance (250 coins required)
+    // Check coin balance (250 coins required, except Owner Admin Strike who has unlimited coins)
     const currentBalance = userProfile.coinBalance || 0;
-    if (currentBalance < POSTING_FEE_COINS) {
+    if (!hasUnlimitedCoins && currentBalance < POSTING_FEE_COINS) {
       setSubmitError(`Insufficient coins. Posting a challenge costs ${POSTING_FEE_COINS} coins. You currently have ${currentBalance} coins. Claim your Daily Reward on Home to earn free coins!`);
       return;
     }
@@ -225,15 +225,25 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
         expiresAt: expiresAt,
       });
 
-      // 2. Only deduct 250 coins after the post is successfully created
+      // 2. Only deduct 250 coins for normal users (Owner Admin Strike has unlimited coins)
       const userDocRef = doc(db, 'users', currentUser.uid);
-      await updateDoc(userDocRef, {
-        coinBalance: increment(-POSTING_FEE_COINS),
-        lastChallengePostAt: currentTime,
-      });
+      if (!hasUnlimitedCoins) {
+        await updateDoc(userDocRef, {
+          coinBalance: increment(-POSTING_FEE_COINS),
+          lastChallengePostAt: currentTime,
+        });
+      } else {
+        await updateDoc(userDocRef, {
+          lastChallengePostAt: currentTime,
+        });
+      }
 
       setIsCreateModalOpen(false);
-      setActionNotice(`Challenge created successfully! -${POSTING_FEE_COINS} Coins deducted.`);
+      setActionNotice(
+        hasUnlimitedCoins 
+          ? 'Challenge created successfully! (Owner Admin Strike)' 
+          : `Challenge created successfully! -${POSTING_FEE_COINS} Coins deducted.`
+      );
       setTimeout(() => setActionNotice(null), 4000);
     } catch (err: any) {
       console.error('Failed to create challenge:', err);
@@ -750,7 +760,9 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
 
               {/* Note on coins and cooldown */}
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 space-y-1">
-                <div>• Exactly 250 coins are deducted ONLY upon successful post creation.</div>
+                <div>
+                  • {hasUnlimitedCoins ? 'Owner Admin Strike has unlimited coins privilege (0 coins deducted).' : 'Exactly 250 coins are deducted ONLY upon successful post creation.'}
+                </div>
                 <div>• Challenge automatically vanishes after 12 hours.</div>
                 <div>• 5-minute cooldown between challenge posts.</div>
               </div>
@@ -766,7 +778,7 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
 
                 <button
                   type="submit"
-                  disabled={submitting || (userProfile?.coinBalance || 0) < POSTING_FEE_COINS || isCooldownActive}
+                  disabled={submitting || (!hasUnlimitedCoins && (userProfile?.coinBalance || 0) < POSTING_FEE_COINS) || isCooldownActive}
                   className="py-2.5 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {submitting ? (
@@ -777,7 +789,7 @@ export const SoloDuoWarsView: React.FC<SoloDuoWarsViewProps> = ({
                   ) : (
                     <>
                       <Plus className="w-4 h-4 stroke-[3]" />
-                      <span>CONFIRM & POST (250 🪙)</span>
+                      <span>{hasUnlimitedCoins ? 'CONFIRM & POST (ADMIN PASS)' : 'CONFIRM & POST (250 🪙)'}</span>
                     </>
                   )}
                 </button>

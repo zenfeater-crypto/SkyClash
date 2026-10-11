@@ -12,10 +12,7 @@ import {
   ArrowLeft,
   Sparkles,
   Camera,
-  X,
-  Copy,
-  ExternalLink,
-  Check
+  X
 } from 'lucide-react';
 import { validateUsername, processProfileImageFile } from '../lib/validation';
 
@@ -43,22 +40,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   const [displayName, setDisplayName] = useState('');
   const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [unauthorizedDomain, setUnauthorizedDomain] = useState<string | null>(null);
-  const [domainCopied, setDomainCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
-
-  const handleCopyDomain = (domainToCopy: string) => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(domainToCopy).then(() => {
-        setDomainCopied(true);
-        setTimeout(() => setDomainCopied(false), 2500);
-      }).catch(() => {});
-    }
-  };
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,7 +69,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLocalError(null);
-    setUnauthorizedDomain(null);
     setSuccessMsg(null);
     clearError();
 
@@ -141,7 +126,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
 
   const handleGoogleLogin = async () => {
     setLocalError(null);
-    setUnauthorizedDomain(null);
     setSuccessMsg(null);
     clearError();
     setLoading(true);
@@ -149,18 +133,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
       await logInWithGoogle();
       onClose();
     } catch (err: any) {
-      const isUnauthorizedDomain = 
-        err.code === 'auth/unauthorized-domain' ||
-        (typeof err.message === 'string' && (
-          err.message.includes('auth/unauthorized-domain') ||
-          err.message.includes('not authorized for Google Sign-In')
-        ));
-
-      if (isUnauthorizedDomain) {
-        const host = typeof window !== 'undefined' ? window.location.hostname : 'current-domain';
-        setUnauthorizedDomain(host);
+      console.warn('Google sign-in caught error:', err);
+      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        setLocalError('Google sign-in was closed before completing.');
+      } else if (err.code === 'auth/popup-blocked') {
+        setLocalError('Sign-in popup was blocked by your browser. Please allow popups.');
+      } else if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('auth/unauthorized-domain'))) {
+        setLocalError('This domain is not yet authorized for Google Sign-In in Firebase. Please sign in with Email or check Admin setup.');
       } else {
-        setLocalError(err.message || 'Google sign in failed.');
+        setLocalError(err.message || 'Could not authenticate with Google. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -199,58 +180,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
         </div>
 
         {/* Display Errors / Notices */}
-        {unauthorizedDomain && (
-          <div className="mb-4 p-4 bg-amber-950/50 border border-amber-500/50 rounded-2xl text-amber-200 text-xs space-y-2.5 shadow-lg animate-in fade-in duration-200">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-semibold text-amber-300">Firebase Authorized Domain Needed</p>
-                <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                  Google Sign-In requires your current app domain to be added to Firebase Console under{' '}
-                  <span className="font-semibold text-white">Authentication &rarr; Settings &rarr; Authorized domains</span>.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-2 bg-slate-950/80 border border-amber-500/30 rounded-xl px-3 py-2 font-mono text-[11px] text-amber-100">
-              <span className="truncate select-all text-xs">{unauthorizedDomain}</span>
-              <button
-                type="button"
-                onClick={() => handleCopyDomain(unauthorizedDomain)}
-                className="inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 hover:text-amber-100 font-sans font-semibold text-[10px] transition cursor-pointer"
-              >
-                {domainCopied ? (
-                  <>
-                    <Check className="w-3 h-3 text-emerald-400" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3 h-3" />
-                    <span>Copy Domain</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between pt-1 border-t border-amber-500/20 text-[11px]">
-              <a
-                href="https://console.firebase.google.com/project/helical-shoreline-xcb1c/authentication/settings"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-cyan-400 hover:text-cyan-300 underline font-medium"
-              >
-                <span>Open Firebase Settings</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <span className="text-[10px] text-slate-400">
-                Or sign up / log in with email below
-              </span>
-            </div>
-          </div>
-        )}
-
-        {(localError || authError) && !unauthorizedDomain && (
+        {(localError || authError) && (
           <div className="mb-4 p-3 bg-red-950/60 border border-red-500/40 rounded-xl text-red-300 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{localError || authError}</span>
@@ -271,27 +201,31 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, initialMo
               type="button"
               onClick={handleGoogleLogin}
               disabled={loading}
-              className="w-full mb-5 py-3 px-4 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 font-semibold text-slate-200 text-sm flex items-center justify-center gap-3 transition shadow-sm active:scale-[0.99] disabled:opacity-60"
+              className="w-full mb-5 py-3 px-4 rounded-xl bg-slate-800/90 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 font-semibold text-slate-200 text-sm flex items-center justify-center gap-3 transition shadow-sm active:scale-[0.99] disabled:opacity-60 cursor-pointer"
             >
-              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.15C3.27 21.36 7.34 24 12 24z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.27 14.24c-.25-.72-.38-1.49-.38-2.24 0-.75.13-1.52.38-2.24V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.15z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.27 2.64 1.26 6.61l4.01 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
-                />
-              </svg>
-              <span>Continue with Google</span>
+              {loading ? (
+                <Loader2 className="w-5 h-5 text-cyan-400 animate-spin shrink-0" />
+              ) : (
+                <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.26v3.15C3.27 21.36 7.34 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.27 14.24c-.25-.72-.38-1.49-.38-2.24 0-.75.13-1.52.38-2.24V6.61H1.26C.46 8.23 0 10.06 0 12s.46 3.77 1.26 5.39l4.01-3.15z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.27 2.64 1.26 6.61l4.01 3.15c.95-2.85 3.6-4.96 6.73-4.96z"
+                  />
+                </svg>
+              )}
+              <span>{loading ? 'Connecting with Google...' : 'Continue with Google'}</span>
             </button>
 
             <div className="relative flex items-center justify-center my-4">

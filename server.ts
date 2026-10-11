@@ -21,6 +21,12 @@ app.get(['/healthz', '/health', '/_health'], (req, res) => {
   res.status(200).send('OK');
 });
 
+// Trusted server time endpoint
+app.get('/api/time', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json({ serverTime: Date.now() });
+});
+
 // Serve static assets from Vite build output if present
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));

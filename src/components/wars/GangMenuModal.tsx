@@ -19,6 +19,7 @@ import { WarsGang, WarsGangMember } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
 import { RoleBadge } from '../RoleBadge';
 import { MembershipBadge } from '../MembershipBadge';
+import { leaveGangTransaction } from '../../lib/gangHelpers';
 
 interface GangMenuModalProps {
   gang: WarsGang;
@@ -89,15 +90,10 @@ export const GangMenuModal: React.FC<GangMenuModalProps> = ({
     setLeaveError(null);
 
     try {
-      // Remove current user from memberUids and members array
+      await leaveGangTransaction(gang.id, currentUser.uid);
+
       const updatedMembers = allMembers.filter((m) => m.uid !== currentUser.uid);
       const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== currentUser.uid);
-
-      await updateDoc(doc(db, 'wars_gangs', gang.id), {
-        members: updatedMembers,
-        memberUids: updatedMemberUids,
-        updatedAt: Date.now()
-      });
 
       if (onUpdateGang) {
         onUpdateGang({

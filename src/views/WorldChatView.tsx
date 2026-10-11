@@ -21,7 +21,8 @@ import {
   Check,
   ChevronDown,
   Sparkles,
-  Info
+  Info,
+  Swords
 } from 'lucide-react';
 import { 
   collection, 
@@ -46,7 +47,9 @@ import {
   WorldChatGroup, 
   PinnedChatMessage, 
   ChatReplyInfo,
-  WorldChatPresence 
+  WorldChatPresence,
+  WarsGang,
+  UserRole 
 } from '../types';
 import { formatTimeAgo } from '../lib/formatters';
 import { RoleBadge } from '../components/RoleBadge';
@@ -55,13 +58,38 @@ import { stripSpoofedRoleTags, normalizeWorldMessage } from '../lib/validation';
 import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { MessageTextFrame } from '../components/MessageTextFrame';
 import { MembershipBadge } from '../components/MembershipBadge';
+import { getUserGang } from '../lib/gangHelpers';
+import { GangChatModal } from '../components/wars/GangChatModal';
+import { AvailableGangsModal } from '../components/wars/AvailableGangsModal';
+import { PrivateChatInbox } from '../components/chat/PrivateChatInbox';
+import { 
+  subscribeToUserConversations, 
+  formatUnreadBadge, 
+  getConversationId 
+} from '../lib/privateChatService';
 
 interface WorldChatViewProps {
   onOpenAuth: () => void;
   onOpenReportModal: (targetType: 'world_message' | 'user', targetId: string, username: string) => void;
+  onOpenPrivateChat?: (
+    friendshipId: string, 
+    partnerProfile: { 
+      uid: string; 
+      username: string; 
+      name?: string; 
+      avatarUrl?: string; 
+      profilePhoto?: string;
+      role?: UserRole;
+      membership?: any;
+    }
+  ) => void;
 }
 
-export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpenReportModal }) => {
+export const WorldChatView: React.FC<WorldChatViewProps> = ({ 
+  onOpenAuth, 
+  onOpenReportModal,
+  onOpenPrivateChat 
+}) => {
   const { currentUser, userProfile, isMuted, isAdmin, isOfficer, canDeleteChats } = useAuth();
   const { blockedUserIds, blockUser } = useUserData();
 
@@ -95,6 +123,16 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
   // Admin Delete Message Confirmation Modal (Replaces window.confirm which fails in iframes)
   const [messageToDelete, setMessageToDelete] = useState<ChatMessage | null>(null);
   const [isDeletingMessage, setIsDeletingMessage] = useState(false);
+
+  // WhatsApp-style Private Chat state
+  const [showPrivateInbox, setShowPrivateInbox] = useState<boolean>(false);
+  const [privateInboxUnread, setPrivateInboxUnread] = useState<number>(0);
+
+  // Gangs state for World Chat Gang shortcut and Join Gang modal
+  const [gangs, setGangs] = useState<WarsGang[]>([]);
+  const [gangChatModalOpen, setGangChatModalOpen] = useState(false);
+  const [joinGangModalOpen, setJoinGangModalOpen] = useState(false);
+  const [pendingInvitesCount, setPendingInvitesCount] = useState<number>(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -157,6 +195,63 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
 
     return () => unsubscribe();
   }, [currentUser, isAdmin]);
+
+  // Subscribe to Gangs to detect user's active gang and power Gang Chat shortcut / Join Gang
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(collection(db, 'wars_gangs'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: WarsGang[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as WarsGang);
+        });
+        setGangs(list);
+      },
+      (err) => {
+        console.warn('World chat gangs listener warning:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  const userGang = useMemo(() => {
+    return getUserGang(gangs, currentUser?.uid);
+  }, [gangs, currentUser?.uid]);
+
+  // Subscribe to pending gang invitations for current user
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'gangInvitations'),
+      where('receiverUid', '==', currentUser.uid),
+      where('status', '==', 'pending')
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        setPendingInvitesCount(snapshot.size);
+      },
+      (err) => console.warn('Pending invites listener warning:', err)
+    );
+    return () => unsub();
+  }, [currentUser]);
+
+  // Sync real-time private conversations unread badge
+  useEffect(() => {
+    if (!currentUser) {
+      setPrivateInboxUnread(0);
+      return;
+    }
+
+    const unsub = subscribeToUserConversations(currentUser.uid, (_, unreadCount) => {
+      setPrivateInboxUnread(unreadCount);
+    });
+
+    return () => unsub();
+  }, [currentUser]);
 
   // 2. Subscribe to Auto Groups setting
   useEffect(() => {
@@ -756,6 +851,20 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
     );
   }
 
+  // Render WhatsApp-Style Dedicated Private Chats Inbox
+  if (showPrivateInbox) {
+    return (
+      <div className="w-full h-full flex flex-col min-h-0 bg-slate-950 text-slate-100 overflow-hidden relative">
+        <PrivateChatInbox
+          onClose={() => setShowPrivateInbox(false)}
+          onOpenPrivateChat={(friendshipId, partnerProfile) => {
+            onOpenPrivateChat?.(friendshipId, partnerProfile);
+          }}
+        />
+      </div>
+    );
+  }
+
   const currentGroupActiveUsers = activeCountByGroup[selectedGroupId] || 0;
 
   return (
@@ -811,12 +920,73 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
           {isAdmin && (
             <button
               onClick={() => setShowCreateGroupModal(true)}
-              className="py-1 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-emerald-400 font-bold text-xs transition flex items-center gap-1"
+              className="py-1 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-emerald-400 font-bold text-xs transition flex items-center gap-1 shrink-0"
               title="Admin: Create World Chat Group"
             >
               <Plus className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Group</span>
             </button>
+          )}
+
+          {/* Gang Chat Shortcut & Join Gang Controls beside '+' button */}
+          {userGang ? (
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Current Gang Name Badge */}
+              <div 
+                className="hidden xs:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 shrink-0"
+                title={`Active Gang: ${userGang.name} (${userGang.gameType || 'Skyblock'})`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-[10px] font-mono text-amber-400 font-bold uppercase shrink-0">
+                  {userGang.gameType === 'bedwars' ? 'BW' : 'SB'}
+                </span>
+                <span className="font-extrabold text-white text-xs max-w-[80px] sm:max-w-[120px] truncate">
+                  {userGang.name}
+                </span>
+              </div>
+
+              {/* Gang Chat Shortcut: Opens Gang Chat Directly */}
+              <button
+                type="button"
+                onClick={() => setGangChatModalOpen(true)}
+                className="py-1 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                title={`Open ${userGang.name} Gang Chat`}
+              >
+                <Swords className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="truncate max-w-[85px] sm:max-w-none">
+                  {userGang.tag ? `[${userGang.tag}] ` : ''}Gang Chat
+                </span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              {/* Gang Chat Shortcut (prompts to join gang if user has none) */}
+              <button
+                type="button"
+                onClick={() => setJoinGangModalOpen(true)}
+                className="py-1 px-2 sm:px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-amber-300 font-bold text-xs transition flex items-center gap-1.5 shrink-0"
+                title="Gang Chat: Join an active gang to participate"
+              >
+                <Swords className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="hidden sm:inline">Gang Chat</span>
+              </button>
+
+              {/* JOIN GANG Button (Beside Gang Chat shortcut) */}
+              <button
+                type="button"
+                onClick={() => setJoinGangModalOpen(true)}
+                className="py-1 px-2.5 sm:px-3 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-bold text-xs transition flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer shrink-0"
+                title="Browse available gangs and apply to join"
+              >
+                <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>JOIN GANG</span>
+                {pendingInvitesCount > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold bg-amber-500 text-slate-950 animate-pulse">
+                    {pendingInvitesCount}
+                  </span>
+                )}
+              </button>
+            </div>
           )}
 
           <div className="text-right hidden md:block font-mono text-xs text-slate-400">
@@ -876,6 +1046,38 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
             </div>
           );
         })}
+
+        {/* Subtle divider */}
+        <div className="h-4 w-px bg-slate-800 shrink-0 mx-1 hidden xs:block" />
+
+        {/* Dedicated PRIVATE CHAT Button beside Group 1 Selector */}
+        <button
+          type="button"
+          onClick={() => {
+            if (!currentUser) {
+              onOpenAuth();
+              return;
+            }
+            setShowPrivateInbox(true);
+          }}
+          className="shrink-0 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/15 via-emerald-500/25 to-teal-500/20 hover:from-emerald-500/30 hover:to-teal-500/30 border border-emerald-500/50 hover:border-emerald-400 text-emerald-300 font-bold text-xs flex items-center gap-2 transition shadow-sm active:scale-95 cursor-pointer group"
+          title="Open WhatsApp-Style Private Chats Inbox"
+        >
+          <div className="relative">
+            <MessageSquare className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+            {privateInboxUnread > 0 && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            )}
+          </div>
+          <span className="font-mono tracking-wider uppercase text-[11px] font-black">
+            PRIVATE CHAT
+          </span>
+          {privateInboxUnread > 0 && (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-black bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/40 animate-pulse">
+              {formatUnreadBadge(privateInboxUnread)}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Pinned Message Sticky Banner (Strict 30-Minute Expiration) */}
@@ -1037,6 +1239,28 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
 
                     {!isMe && (
                       <>
+                        <button
+                          onClick={() => {
+                            if (!currentUser) {
+                              onOpenAuth();
+                              return;
+                            }
+                            const convId = getConversationId(currentUser.uid, msg.senderUid);
+                            onOpenPrivateChat?.(convId, {
+                              uid: msg.senderUid,
+                              username: msg.senderUsername,
+                              name: msg.senderName || msg.senderUsername,
+                              avatarUrl: msg.senderAvatar,
+                              profilePhoto: msg.senderAvatar,
+                              role: msg.senderRole,
+                              membership: msg.senderMembership
+                            });
+                          }}
+                          className="hover:text-emerald-300 text-emerald-400/90 flex items-center gap-1 transition font-medium"
+                          title={`Send Private Message to ${msg.senderUsername}`}
+                        >
+                          <MessageSquare className="w-3 h-3 text-emerald-400" /> Chat
+                        </button>
                         <button
                           onClick={() => onOpenReportModal('world_message', msg.id, msg.senderUsername)}
                           className="hover:text-amber-400 flex items-center gap-1 transition"
@@ -1328,6 +1552,27 @@ export const WorldChatView: React.FC<WorldChatViewProps> = ({ onOpenAuth, onOpen
             </div>
           </div>
         </div>
+      )}
+
+      {/* Gang Chat Modal */}
+      {userGang && gangChatModalOpen && (
+        <GangChatModal
+          gang={userGang}
+          isOpen={gangChatModalOpen}
+          onClose={() => setGangChatModalOpen(false)}
+          onOpenAuth={onOpenAuth}
+        />
+      )}
+
+      {/* Available Gangs & Join Modal */}
+      {joinGangModalOpen && (
+        <AvailableGangsModal
+          gangs={gangs}
+          isOpen={joinGangModalOpen}
+          onClose={() => setJoinGangModalOpen(false)}
+          onOpenAuth={onOpenAuth}
+          onOpenPrivateChat={onOpenPrivateChat}
+        />
       )}
     </div>
   );

@@ -5,7 +5,7 @@ import { UserRole, MembershipLevel } from '../types';
  *
  * Requirements:
  * - VANGUARD: Golden frame + golden glow
- * - OVERLORD: Shiny diamond-style message frame + shine
+ * - OVERLORD: Silver metallic frame + silver reflection & glow
  * - SUPREME: Purple message frame + dark-purple aura
  * - OWNER ADMIN: Dark-purple SUPREME-style message frame + aura while still showing ADMIN
  */
@@ -24,9 +24,9 @@ export function getMessageStyleClass(
   }
 
   // 2. OVERLORD (Premium)
-  // Diamond-style shiny message frame + shine reflection
+  // Silver metallic message frame + silver reflection
   if (level === 'premium' || level === 'overlord') {
-    return 'bg-gradient-to-r from-amber-950/50 via-slate-900/90 to-cyan-950/40 border-2 border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.3),0_0_10px_rgba(34,211,238,0.2)] ring-1 ring-cyan-300/40';
+    return 'bg-gradient-to-r from-slate-900/95 via-slate-800/90 to-slate-900/95 border-2 border-slate-300/80 shadow-[0_0_20px_rgba(203,213,225,0.35)] ring-1 ring-slate-200/50';
   }
 
   // 3. VANGUARD (Premium Lite)

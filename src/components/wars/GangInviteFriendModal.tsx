@@ -9,7 +9,8 @@ import {
   ShieldAlert, 
   Sparkles,
   AlertCircle,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { 
   collection, 
@@ -23,9 +24,10 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
-import { WarsGang, WarsGangMember, Friendship, UserRole } from '../../types';
+import { WarsGang, WarsGangMember, Friendship, UserRole, GangInvitation } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
 import { stripSpoofedRoleTags } from '../../lib/validation';
+import { sendGangInvitation } from '../../lib/gangHelpers';
 
 interface GangInviteFriendModalProps {
   gang: WarsGang;
@@ -57,10 +59,30 @@ export const GangInviteFriendModal: React.FC<GangInviteFriendModalProps> = ({
   const [invitingUid, setInvitingUid] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingInvites, setPendingInvites] = useState<Record<string, boolean>>({});
 
   const isBedwars = gang.gameType === 'bedwars';
   const isLeader = currentUser && gang.leaderUid === currentUser.uid;
   const canInvite = isAdmin || isLeader;
+
+  // Listen to pending invitations sent by this gang
+  useEffect(() => {
+    if (!isOpen || !gang.id) return;
+    const q = query(
+      collection(db, 'gangInvitations'),
+      where('gangId', '==', gang.id),
+      where('status', '==', 'pending')
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const map: Record<string, boolean> = {};
+      snapshot.forEach((d) => {
+        const inv = d.data() as GangInvitation;
+        map[inv.receiverUid] = true;
+      });
+      setPendingInvites(map);
+    });
+    return () => unsub();
+  }, [isOpen, gang.id]);
 
   // Listen to current user's existing friendships from the existing Friends system
   useEffect(() => {
@@ -130,69 +152,24 @@ export const GangInviteFriendModal: React.FC<GangInviteFriendModalProps> = ({
     setSuccessMessage(null);
 
     try {
-      // Look up friend's full user profile from users collection for accurate role/avatar
-      let friendRole: UserRole = 'user';
-      let friendMembership = undefined;
-      let friendAvatar = friend.avatarUrl || '';
-      try {
-        const userDoc = await getDoc(doc(db, 'users', friend.uid));
-        if (userDoc.exists()) {
-          const udata = userDoc.data();
-          friendRole = udata.role || 'user';
-          friendMembership = udata.membership || undefined;
-          friendAvatar = udata.profilePhoto || udata.avatarUrl || friendAvatar;
+      const res = await sendGangInvitation(
+        gang,
+        {
+          uid: currentUser.uid,
+          username: stripSpoofedRoleTags(userProfile?.username || 'Leader')
+        },
+        {
+          uid: friend.uid,
+          username: friend.username
         }
-      } catch (e) {
-        console.warn('Could not fetch target user profile, using friendship cache:', e);
+      );
+
+      if (!res.success && res.error) {
+        setErrorMessage(res.error);
+        return;
       }
 
-      const newMember: WarsGangMember = {
-        uid: friend.uid,
-        username: stripSpoofedRoleTags(friend.username),
-        displayName: stripSpoofedRoleTags(friend.name || friend.username),
-        role: 'member',
-        joinedAt: Date.now(),
-        avatarUrl: friendAvatar,
-        userRole: friendRole,
-        membership: friendMembership
-      };
-
-      const updatedMembers = [...(gang.members || []), newMember];
-      const updatedMemberUids = [...(gang.memberUids || []), friend.uid];
-
-      // Update gang in Firestore
-      await updateDoc(doc(db, 'wars_gangs', gang.id), {
-        members: updatedMembers,
-        memberUids: updatedMemberUids,
-        updatedAt: Date.now()
-      });
-
-      // Also record invitation doc for history/record keeping
-      const inviteId = `${gang.id}_${friend.uid}`;
-      await setDoc(doc(db, 'gangInvitations', inviteId), {
-        id: inviteId,
-        gangId: gang.id,
-        gangName: gang.name,
-        gangTag: gang.tag || '',
-        gangIcon: gang.iconUrl || '',
-        gameType: gang.gameType || 'skyblock',
-        senderUid: currentUser.uid,
-        senderUsername: stripSpoofedRoleTags(userProfile?.username || 'Leader'),
-        receiverUid: friend.uid,
-        receiverUsername: friend.username,
-        status: 'accepted',
-        createdAt: Date.now()
-      });
-
-      if (onUpdateGang) {
-        onUpdateGang({
-          ...gang,
-          members: updatedMembers,
-          memberUids: updatedMemberUids
-        });
-      }
-
-      setSuccessMessage(`Successfully added @${friend.username} to ${gang.name}!`);
+      setSuccessMessage(`Invitation sent to @${friend.username}! The player must accept the invitation before membership becomes active.`);
     } catch (err: any) {
       console.error('Failed to invite friend:', err);
       setErrorMessage(err.message || 'Failed to send invitation.');
@@ -333,6 +310,11 @@ export const GangInviteFriendModal: React.FC<GangInviteFriendModalProps> = ({
                       <span className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-400 text-xs font-semibold border border-slate-700">
                         In Gang
                       </span>
+                    ) : pendingInvites[friend.uid] ? (
+                      <span className="px-3 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 text-xs font-semibold border border-amber-500/30 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Invited</span>
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleInviteFriend(friend)}
@@ -348,7 +330,7 @@ export const GangInviteFriendModal: React.FC<GangInviteFriendModalProps> = ({
                         {isInviting ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Adding...</span>
+                            <span>Inviting...</span>
                           </>
                         ) : (
                           <>

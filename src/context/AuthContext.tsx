@@ -7,6 +7,8 @@ import {
   signOut, 
   sendPasswordResetEmail,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   updateProfile
 } from 'firebase/auth';
 import { 
@@ -49,6 +51,8 @@ interface AuthContextType {
   isSupreme: boolean;
   hasAdminTalk: boolean;
   isAdFree: boolean;
+  isOwnerAdmin: boolean;
+  hasUnlimitedCoins: boolean;
   clearError: () => void;
   signUpWithEmail: (
     email: string, 
@@ -206,6 +210,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let unsubscribeDoc: (() => void) | null = null;
 
+    // Listen for any pending redirect auth result
+    getRedirectResult(auth)
+      .then(async (cred) => {
+        if (cred?.user) {
+          await checkAndFetchUserProfile(cred.user);
+        }
+      })
+      .catch((err) => {
+        if (err?.code && err.code !== 'auth/null-user') {
+          console.warn('[Auth] getRedirectResult notice:', err);
+        }
+      });
+
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (unsubscribeDoc) {
@@ -286,22 +303,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       const userDocRef = doc(db, 'users', uid);
+      const existingUserSnap = await transaction.get(userDocRef);
+      const existingData = existingUserSnap.exists() ? (existingUserSnap.data() as Record<string, any>) : {};
+
       const finalDisplayName = (displayName && displayName.trim()) 
         ? stripSpoofedRoleTags(displayName.trim()) || exactUsername 
-        : exactUsername;
+        : (existingData.name || exactUsername);
 
-      // Base profile with all standard fields preserved
+      // Base profile with all existing data preserved permanently
       const newProfileData: Record<string, any> = {
+        ...existingData,
         uid,
         username: exactUsername,
         normalizedUsername: exactUsername,
         name: finalDisplayName,
-        email: email || '',
-        avatarUrl: `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(exactUsername)}`,
-        role: initialRole,
-        createdAt: realCreationTime || Date.now(),
-        bio: '',
+        email: email || existingData.email || '',
+        avatarUrl: existingData.avatarUrl || `https://api.dicebear.com/7.x/bottts-neutral/svg?seed=${encodeURIComponent(exactUsername)}`,
+        role: existingData.role || initialRole,
+        createdAt: existingData.createdAt || realCreationTime || Date.now(),
+        bio: existingData.bio || '',
         profileSetupComplete: true, // Marked completed upon registration
+        // Never reset an existing user's balance or reward streak
+        coinBalance: typeof existingData.coinBalance === 'number' ? existingData.coinBalance : 0,
+        loginStreak: typeof existingData.loginStreak === 'number' ? existingData.loginStreak : 0,
+        rewardCycleDay: typeof existingData.rewardCycleDay === 'number' ? existingData.rewardCycleDay : 1,
       };
 
       if (profilePhoto && typeof profilePhoto === 'string' && profilePhoto.trim().length > 0) {
@@ -318,7 +343,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       transaction.set(usernameDocRef, sanitizedUsernameClaim);
-      transaction.set(userDocRef, sanitizedProfile);
+      transaction.set(userDocRef, sanitizedProfile, { merge: true });
     });
   };
 
@@ -368,26 +393,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthError(null);
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      if (cred.user) {
+      if (cred?.user) {
         await checkAndFetchUserProfile(cred.user);
       }
     } catch (err: any) {
-      if (err.code === 'auth/popup-closed-by-user') {
-        throw new Error('Google sign-in popup was closed.');
-      } else if (err.code === 'auth/popup-blocked') {
-        throw new Error('Popup blocked by browser. Please allow popups for this site.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        console.warn('Google sign-in unauthorized domain:', err);
-        const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
-        const errWithCode = new Error(
-          `Domain "${hostname}" is not authorized for Google Sign-In in Firebase. Please add "${hostname}" to Authorized Domains in your Firebase Console (Authentication > Settings > Authorized Domains).`
-        );
-        (errWithCode as any).code = 'auth/unauthorized-domain';
-        throw errWithCode;
-      } else {
-        console.warn('Google sign-in warning:', err);
-        throw new Error(err.message || 'Could not authenticate with Google.');
+      console.warn('[Auth] Google sign-in notice:', err);
+      // Fallback to redirect if popup is blocked or unsupported in current environment
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment') {
+        try {
+          await signInWithRedirect(auth, googleProvider);
+          return;
+        } catch (redirectErr: any) {
+          console.error('[Auth] signInWithRedirect error:', redirectErr);
+          throw redirectErr;
+        }
       }
+      throw err;
     }
   };
 
@@ -455,6 +476,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     delete rawUpdates.isBanned;
     delete rawUpdates.muted;
     delete rawUpdates.isMuted;
+    delete rawUpdates.coinBalance;
+    delete rawUpdates.loginStreak;
+    delete rawUpdates.rewardCycleDay;
+    delete rawUpdates.lastRewardClaimDate;
+    delete rawUpdates.lastRewardClaimTimestamp;
+    delete rawUpdates.rewardHistory;
 
     // Sanitize updates to guarantee zero undefined values
     const cleanUpdates = sanitizeForFirestore(rawUpdates);
@@ -520,6 +547,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Ad-Free Experience: Unlocked for Vanguard, Overlord, Supreme, and Owner Admin
   const isAdFree = isAdmin || isVanguard || isOverlord || isSupreme;
 
+  // Protected Owner Admin "Strike" Unlimited Coins privilege
+  const isOwnerAdmin = Boolean(
+    isAdmin && 
+    currentUser && 
+    (userProfile?.username?.toLowerCase() === 'strike' || 
+     userProfile?.normalizedUsername === 'strike' ||
+     userProfile?.name?.toLowerCase() === 'strike' ||
+     currentUser?.displayName?.toLowerCase() === 'strike')
+  );
+  const hasUnlimitedCoins = isOwnerAdmin;
+
   return (
     <AuthContext.Provider
       value={{
@@ -548,6 +586,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isSupreme,
         hasAdminTalk,
         isAdFree,
+        isOwnerAdmin,
+        hasUnlimitedCoins,
         clearError,
         signUpWithEmail,
         logInWithEmail,

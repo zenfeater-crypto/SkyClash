@@ -87,6 +87,23 @@ service cloud.firestore {
       );
     }
 
+    // Validate 24-hour daily reward cooldown and prevent coin balance cheating
+    function isValidOwnerDailyRewardUpdate(userId) {
+      return (
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastRewardClaimTimestamp'])) ?
+          (!('coinBalance' in request.resource.data) || !('coinBalance' in resource.data) || request.resource.data.coinBalance <= resource.data.coinBalance) :
+          (
+            // Must wait at least 24 hours (86,400,000 ms) from previous claim
+            (!('lastRewardClaimTimestamp' in resource.data) || request.time.toMillis() >= resource.data.lastRewardClaimTimestamp + 86400000) &&
+            // Claim timestamp must match or precede current server time
+            request.resource.data.lastRewardClaimTimestamp <= request.time.toMillis() + 60000 &&
+            // Max reward increment is 1000 coins (schedule max is 500 or fallback 1000)
+            (!('coinBalance' in resource.data) || request.resource.data.coinBalance <= resource.data.coinBalance + 1000)
+          )
+      ) &&
+      (!('coinBalance' in request.resource.data) || request.resource.data.coinBalance >= 0);
+    }
+
     // USERS COLLECTION (Hierarchy: Admin [Strike Owner], Officer, Trusted, User, JMD)
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -116,10 +133,11 @@ service cloud.firestore {
         (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'name', 'bio', 'profilePhoto', 'avatarUrl', 'profileSetupComplete', 'lastWorldChatAt', 'lastChatMessageNorm', 'sameMessageCount',
           'coinBalance', 'loginStreak', 'lastRewardClaimDate', 'lastRewardClaimTimestamp', 'rewardCycleDay', 'lastChallengePostAt',
-          'profileFrameId', 'textFrameId'
+          'profileFrameId', 'textFrameId', 'rewardHistory', 'lastTradePostAt'
         ]) &&
          (!('role' in resource.data) || request.resource.data.role == resource.data.role) &&
-         (!('sameMessageCount' in request.resource.data) || request.resource.data.sameMessageCount <= 2)) ||
+         (!('sameMessageCount' in request.resource.data) || request.resource.data.sameMessageCount <= 2) &&
+         isValidOwnerDailyRewardUpdate(userId)) ||
         (isOwner(userId) && request.resource.data.role == 'admin' && (
           exists(/databases/$(database)/documents/usernames/strike) ?
             get(/databases/$(database)/documents/usernames/strike).data.uid == userId :
@@ -280,7 +298,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // TRADE POSTS (Community Trade Feed - Restricted to active signed-in users)
+    // TRADE POSTS (Community Trade Feed - Restricted to active signed-in users with 7-min cooldown)
     match /trade_posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() &&
@@ -289,7 +307,13 @@ service cloud.firestore {
         !isUserMuted(request.auth.uid) &&
         request.resource.data.createdAt is number &&
         request.resource.data.expiresAt is number &&
-        request.resource.data.expiresAt > request.time.toMillis();
+        request.resource.data.expiresAt > request.time.toMillis() &&
+        (
+          !userExists(request.auth.uid) ||
+          !('lastTradePostAt' in getUserData(request.auth.uid)) ||
+          getUserData(request.auth.uid).lastTradePostAt == null ||
+          request.time.toMillis() >= getUserData(request.auth.uid).lastTradePostAt + 418000
+        );
       allow update: if isSignedIn() && (
         (resource.data.posterUid == request.auth.uid && request.resource.data.posterUid == resource.data.posterUid && !isUserBanned(request.auth.uid) && !isUserMuted(request.auth.uid)) ||
         isStaff()
@@ -429,6 +453,39 @@ service cloud.firestore {
       );
     }
 
+    // GANG MEMBERSHIPS (ONE GANG AT A TIME LOCK)
+    match /gangMemberships/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId || 
+        isAdmin() || 
+        (request.resource.data.gangId != null && exists(/databases/$(database)/documents/wars_gangs/$(request.resource.data.gangId)) && get(/databases/$(database)/documents/wars_gangs/$(request.resource.data.gangId)).data.leaderUid == request.auth.uid)
+      );
+      allow update: if isAdmin();
+      allow delete: if isSignedIn() && (
+        request.auth.uid == userId || 
+        isAdmin() || 
+        (exists(/databases/$(database)/documents/wars_gangs/$(resource.data.gangId)) && get(/databases/$(database)/documents/wars_gangs/$(resource.data.gangId)).data.leaderUid == request.auth.uid)
+      );
+    }
+
+    // GANG APPLICATIONS
+    match /gangApplications/{appId} {
+      allow read: if isSignedIn() && (
+        resource.data.applicantUid == request.auth.uid || 
+        resource.data.leaderUid == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isSignedIn() &&
+        !isUserBanned(request.auth.uid) &&
+        request.resource.data.applicantUid == request.auth.uid;
+      allow update, delete: if isSignedIn() && (
+        resource.data.applicantUid == request.auth.uid || 
+        resource.data.leaderUid == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
     // SKYBLOCK WARS - ANNOUNCEMENTS (Admin Only)
     match /wars_announcements/{announcementId} {
       allow read: if isSignedIn();
@@ -514,23 +571,34 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // TOURNAMENTS (Only Owner Admin Strike can create, publish, edit, or delete; Public read)
+    // TOURNAMENTS (Owner Admin Strike manages all; Authenticated players can self-register if slots open)
     match /tournaments/{tournamentId} {
       allow read: if true;
       allow create: if isAdmin() &&
         request.resource.data.name is string &&
         (request.resource.data.category == 'skyblock' || request.resource.data.category == 'bedwars') &&
         request.resource.data.maxPlayers is number;
-      allow update: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['registeredCount', 'registeredUserUids', 'updatedAt']) &&
+        request.resource.data.registeredCount == (('registeredCount' in resource.data) ? resource.data.registeredCount + 1 : 1) &&
+        request.resource.data.registeredCount <= resource.data.maxPlayers &&
+        request.auth.uid in request.resource.data.registeredUserUids &&
+        (!('registeredUserUids' in resource.data) || !(request.auth.uid in resource.data.registeredUserUids))
+      );
       allow delete: if isAdmin();
     }
 
-    // TOURNAMENT REGISTRATIONS (Only Owner Admin Strike can officially register/remove players; Public read)
+    // TOURNAMENT REGISTRATIONS (Owner Admin Strike or authenticated players self-registering; Public read)
     match /tournament_registrations/{regId} {
       allow read: if true;
-      allow create: if isAdmin() &&
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        regId == request.resource.data.tournamentId + '_' + request.auth.uid &&
+        request.resource.data.userUid == request.auth.uid &&
         request.resource.data.tournamentId is string &&
-        request.resource.data.userUid is string;
+        exists(/databases/$(database)/documents/tournaments/$(request.resource.data.tournamentId))
+      );
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }

@@ -194,20 +194,20 @@ export const CircularProfileAvatar: React.FC<CircularProfileAvatarProps> = ({
     );
   }
 
-  // 3. OVERLORD (Premium) — EXACT Diamond Circular Profile Frame Asset
+  // 3. OVERLORD (Premium) — EXACT Silver Circular Profile Frame Asset
   if (isOverlord) {
     return (
       <div 
         onClick={onClick}
-        title="OVERLORD — Premium Member Tier"
+        title="OVERLORD — Premium Member Tier (Silver)"
         className={`relative inline-flex items-center justify-center shrink-0 ${dimensions} ${onClick ? 'cursor-pointer' : ''} ${className}`}
       >
         {showAura && (
-          <div className="absolute inset-0 rounded-full bg-cyan-400/30 blur-md pointer-events-none" />
+          <div className="absolute inset-0 rounded-full bg-slate-200/30 blur-md pointer-events-none" />
         )}
 
-        {/* Circular Profile Photo */}
-        <div className="relative z-10 w-[80%] h-[80%] rounded-full overflow-hidden border border-cyan-400/80 shadow-[0_0_12px_rgba(34,211,238,0.5)]">
+        {/* Circular Profile Photo with Polished Silver Rim */}
+        <div className="relative z-10 w-[80%] h-[80%] rounded-full overflow-hidden border border-slate-300 shadow-[0_0_12px_rgba(226,232,240,0.6)]">
           <img
             src={imageSrc}
             alt={alt}
@@ -219,13 +219,13 @@ export const CircularProfileAvatar: React.FC<CircularProfileAvatarProps> = ({
           />
         </div>
 
-        {/* EXACT Diamond Circular Frame Asset Overlay */}
+        {/* EXACT Silver Circular Frame Asset Overlay */}
         <div className={`absolute inset-0 pointer-events-none z-20 flex items-center justify-center ${frameScaleClass}`}>
           <img
             src={frameAssets.overlord.profileFrame}
-            alt="Overlord Diamond Frame"
+            alt="Overlord Silver Frame"
             referrerPolicy="no-referrer"
-            className="w-full h-full object-contain pointer-events-none drop-shadow-[0_0_8px_rgba(34,211,238,0.5)]"
+            className="w-full h-full object-contain pointer-events-none drop-shadow-[0_0_8px_rgba(226,232,240,0.65)]"
           />
         </div>
       </div>

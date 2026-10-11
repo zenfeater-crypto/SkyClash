@@ -14,7 +14,10 @@ import {
   Trophy,
   CheckCircle2,
   AlertTriangle,
-  MoreVertical
+  MoreVertical,
+  Clock,
+  Check,
+  Loader2
 } from 'lucide-react';
 import { 
   doc, 
@@ -26,17 +29,28 @@ import {
   query, 
   where, 
   getDocs,
+  getDoc,
+  setDoc,
+  onSnapshot,
+  runTransaction,
+  writeBatch,
   limit
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
-import { WarsGang, WarsGangMember, UserRole } from '../../types';
+import { WarsGang, WarsGangMember, UserRole, GangApplication } from '../../types';
 import { CircularProfileAvatar } from '../CircularProfileAvatar';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { stripSpoofedRoleTags } from '../../lib/validation';
 import { GangMenuModal } from './GangMenuModal';
 import { GangAllMembersModal } from './GangAllMembersModal';
 import { GangInviteFriendModal } from './GangInviteFriendModal';
+import { 
+  approveGangApplication, 
+  rejectGangApplication, 
+  leaveGangTransaction, 
+  DEFAULT_GANG_MAX_MEMBERS 
+} from '../../lib/gangHelpers';
 
 interface GangDetailModalProps {
   gang: WarsGang;
@@ -103,7 +117,76 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
   );
   const canManageMembers = isAdmin || isLeader;
 
-  // Handler to add a member by username
+  // Real-time listener for pending applications to this gang (Leader & Admin)
+  const [pendingApplications, setPendingApplications] = useState<GangApplication[]>([]);
+  const [approvingAppId, setApprovingAppId] = useState<string | null>(null);
+  const [applicationError, setApplicationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || !gang.id || !canManageMembers) return;
+    const q = query(
+      collection(db, 'gangApplications'),
+      where('gangId', '==', gang.id),
+      where('status', '==', 'pending')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: GangApplication[] = [];
+      snapshot.forEach((d) => {
+        list.push({ id: d.id, ...d.data() } as GangApplication);
+      });
+      setPendingApplications(list);
+    });
+    return () => unsubscribe();
+  }, [isOpen, gang.id, canManageMembers]);
+
+  // Handler for Leader to approve a join request
+  const handleApproveApplication = async (app: GangApplication) => {
+    if (!canManageMembers || approvingAppId) return;
+    setApprovingAppId(app.id);
+    setApplicationError(null);
+
+    try {
+      let userRole: UserRole = 'user';
+      let userMembership = undefined;
+      let userAvatar = app.applicantAvatar || '';
+      try {
+        const uSnap = await getDoc(doc(db, 'users', app.applicantUid));
+        if (uSnap.exists()) {
+          const udata = uSnap.data();
+          userRole = udata.role || 'user';
+          userMembership = udata.membership;
+          userAvatar = udata.profilePhoto || udata.avatarUrl || userAvatar;
+        }
+      } catch (e) {
+        console.warn('Could not fetch applicant profile:', e);
+      }
+
+      await approveGangApplication(app, {
+        uid: app.applicantUid,
+        username: app.applicantUsername,
+        name: app.applicantDisplayName,
+        avatarUrl: userAvatar,
+        role: userRole,
+        membership: userMembership
+      });
+    } catch (err: any) {
+      console.error('Failed to approve application:', err);
+      setApplicationError(err.message || 'Failed to approve application.');
+    } finally {
+      setApprovingAppId(null);
+    }
+  };
+
+  const handleRejectApplication = async (appId: string) => {
+    if (!canManageMembers) return;
+    try {
+      await rejectGangApplication(appId);
+    } catch (err: any) {
+      console.error('Failed to reject application:', err);
+    }
+  };
+
+  // Handler to add a member by username (Enforces One Gang at a Time atomically)
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMemberUsername.trim() || addingMember) return;
@@ -131,31 +214,55 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
       const targetData = targetDoc.data();
       const targetUid = targetDoc.id;
 
-      // Check if already in gang
-      if (gang.memberUids?.includes(targetUid) || gang.members?.some((m) => m.uid === targetUid)) {
-        setAddMemberError(`@${cleanUsername} is already a member of this gang.`);
-        setAddingMember(false);
-        return;
-      }
+      const maxCapacity = gang.maxMembers || DEFAULT_GANG_MAX_MEMBERS;
+      const gangRef = doc(db, 'wars_gangs', gang.id);
+      const membershipRef = doc(db, 'gangMemberships', targetUid);
 
-      const newMember: WarsGangMember = {
-        uid: targetUid,
-        username: stripSpoofedRoleTags(targetData.username || cleanUsername),
-        displayName: stripSpoofedRoleTags(targetData.name || targetData.username || cleanUsername),
-        role: 'member',
-        joinedAt: Date.now(),
-        avatarUrl: targetData.profilePhoto || targetData.avatarUrl || '',
-        userRole: targetData.role || 'user',
-        membership: targetData.membership || undefined
-      };
+      await runTransaction(db, async (transaction) => {
+        // Enforce ONE GANG AT A TIME in atomic backend transaction
+        const memberSnap = await transaction.get(membershipRef);
+        if (memberSnap.exists()) {
+          throw new Error(`@${cleanUsername} already belongs to another gang. A player can belong to only ONE gang.`);
+        }
 
-      const updatedMembers = [...(gang.members || []), newMember];
-      const updatedMemberUids = [...(gang.memberUids || []), targetUid];
+        const gangSnap = await transaction.get(gangRef);
+        if (!gangSnap.exists()) throw new Error('Gang not found.');
+        const currentGangData = gangSnap.data() as WarsGang;
+        const currentMembers = currentGangData.members || [];
 
-      await updateDoc(doc(db, 'wars_gangs', gang.id), {
-        members: updatedMembers,
-        memberUids: updatedMemberUids,
-        updatedAt: Date.now()
+        if (currentMembers.length >= maxCapacity) {
+          throw new Error(`Gang is full. Maximum limit of ${maxCapacity} members reached.`);
+        }
+
+        if (currentGangData.memberUids?.includes(targetUid)) {
+          throw new Error(`@${cleanUsername} is already a member of this gang.`);
+        }
+
+        const newMember: WarsGangMember = {
+          uid: targetUid,
+          username: stripSpoofedRoleTags(targetData.username || cleanUsername),
+          displayName: stripSpoofedRoleTags(targetData.name || targetData.username || cleanUsername),
+          role: 'member',
+          joinedAt: Date.now(),
+          avatarUrl: targetData.profilePhoto || targetData.avatarUrl || '',
+          userRole: targetData.role || 'user',
+          membership: targetData.membership || undefined
+        };
+
+        transaction.set(membershipRef, {
+          uid: targetUid,
+          gangId: gang.id,
+          gangName: currentGangData.name,
+          gameType: currentGangData.gameType || 'skyblock',
+          role: 'member',
+          joinedAt: Date.now()
+        });
+
+        transaction.update(gangRef, {
+          members: [...currentMembers, newMember],
+          memberUids: [...(currentGangData.memberUids || []), targetUid],
+          updatedAt: Date.now()
+        });
       });
 
       setAddMemberSuccess(`Added @${cleanUsername} to ${gang.name}!`);
@@ -186,15 +293,7 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
     setDeleteMemberError(null);
 
     try {
-      const updatedMembers = (gang.members || []).filter((m) => m.uid !== deleteMemberTarget.uid);
-      const updatedMemberUids = (gang.memberUids || []).filter((u) => u !== deleteMemberTarget.uid);
-
-      await updateDoc(doc(db, 'wars_gangs', gang.id), {
-        members: updatedMembers,
-        memberUids: updatedMemberUids,
-        updatedAt: Date.now()
-      });
-
+      await leaveGangTransaction(gang.id, deleteMemberTarget.uid);
       setDeleteMemberTarget(null);
     } catch (err: any) {
       console.error('Error removing member:', err);
@@ -218,7 +317,12 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
     setDeleteGangError(null);
 
     try {
-      await deleteDoc(doc(db, 'wars_gangs', gang.id));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'wars_gangs', gang.id));
+      (gang.memberUids || []).forEach((mUid) => {
+        batch.delete(doc(db, 'gangMemberships', mUid));
+      });
+      await batch.commit();
       setIsDeleteModalOpen(false);
       onClose();
     } catch (err: any) {
@@ -517,6 +621,79 @@ export const GangDetailModal: React.FC<GangDetailModalProps> = ({
               <div className="text-xl font-black text-cyan-400 mt-0.5">{gang.stats?.rating || 1000}</div>
             </div>
           </div>
+
+          {/* Pending Applications / Join Requests (For Leader & Admin) */}
+          {canManageMembers && pendingApplications.length > 0 && (
+            <div className="p-4 rounded-2xl bg-slate-950/90 border border-amber-500/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-amber-300 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  Pending Join Requests ({pendingApplications.length})
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Leader Approval Required
+                </span>
+              </div>
+
+              {applicationError && (
+                <div className="text-xs text-rose-400 bg-rose-500/10 p-2.5 rounded-xl border border-rose-500/20">
+                  {applicationError}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {pendingApplications.map((app) => (
+                  <div 
+                    key={app.id}
+                    className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-full overflow-hidden bg-slate-800 shrink-0">
+                        {app.applicantAvatar ? (
+                          <img src={app.applicantAvatar} alt={app.applicantUsername} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center font-bold text-slate-400 text-xs">
+                            {app.applicantUsername.substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-white truncate">
+                          {app.applicantDisplayName || app.applicantUsername}
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          @{app.applicantUsername}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleRejectApplication(app.id)}
+                        className="py-1 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition cursor-pointer"
+                      >
+                        Decline
+                      </button>
+                      <button
+                        type="button"
+                        disabled={approvingAppId === app.id}
+                        onClick={() => handleApproveApplication(app)}
+                        className="py-1 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer disabled:opacity-50"
+                      >
+                        {approvingAppId === app.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Check className="w-3 h-3" />
+                        )}
+                        <span>Approve</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Member Management (For Gang Leader & Admin) */}
           {canManageMembers && (

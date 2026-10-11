@@ -174,6 +174,7 @@ export interface UserProfile {
   lastWorldChatAt?: number; // timestamp ms of last successful world message
   lastChatMessageNorm?: string; // normalized message string for duplicate detection
   sameMessageCount?: number; // consecutive identical message counter (max 2)
+  lastTradePostAt?: number; // timestamp ms of last successful trade post (7-minute cooldown)
 
   // Custom Frame Collection Assignments (Managed exclusively by Owner Admin)
   profileFrameId?: string | null;
@@ -185,9 +186,20 @@ export interface UserProfile {
   lastRewardClaimDate?: string; // YYYY-MM-DD in UTC
   lastRewardClaimTimestamp?: number; // ms
   rewardCycleDay?: number; // 1 to 7
+  rewardHistory?: DailyRewardHistoryEntry[];
 
   // Solo / Duo Challenge Post Cooldown
   lastChallengePostAt?: number; // ms timestamp of last created challenge post
+}
+
+export interface DailyRewardHistoryEntry {
+  claimedAt: number;
+  rewardCycleDay: number;
+  streak: number;
+  rewardType: 'coins' | 'frame';
+  coinsAwarded: number;
+  frameId?: string;
+  frameName?: string;
 }
 
 // TOURNAMENTS
@@ -203,6 +215,7 @@ export interface Tournament {
   maxPlayers: number; // 5. Maximum Players (e.g. 32)
   winningAmount: string; // 6. Winning Amount (e.g. "1,000,000 Coins" or "₹5,000")
   entryFee: string; // 7. Entry Fee (e.g. "Free" or "500 Coins")
+  entryFeeCoins?: number; // Parsed or configured numeric coin fee (e.g. 700)
   description?: string; // Optional description
   isPublished: boolean; // Only published tournaments appear in public feed
   registeredUserUids?: string[]; // Registered user UIDs for duplicate check and quick count
@@ -228,6 +241,9 @@ export interface TournamentRegistration {
   registeredAt: number;
   registeredByAdminUid: string;
   registeredByUsername: string;
+  entryFeeCoinsPaid?: number; // Exact coins deducted (0 for free/complimentary/Strike)
+  entryFeeString?: string;
+  feePolicy?: 'paid' | 'complimentary_admin' | 'free';
   notes?: string;
 }
 
@@ -303,6 +319,39 @@ export interface Friendship {
   lastMessageTimestamp?: string | number;
 }
 
+export interface ConversationParticipantProfile {
+  uid: string;
+  username: string;
+  name?: string;
+  avatarUrl?: string;
+  profilePhoto?: string;
+  role?: UserRole;
+  membership?: UserMembership | null;
+  membershipLevel?: MembershipLevel | null;
+}
+
+export type MessageDeliveryStatus = 'sending' | 'saved_locally' | 'sent' | 'delivered' | 'read';
+
+export interface PrivateConversation {
+  id: string; // [uid1, uid2].sort().join('_')
+  participants: string[]; // [uid1, uid2]
+  participantUids?: string[];
+  participantProfiles?: Record<string, ConversationParticipantProfile>;
+  usernames?: Record<string, string>;
+  names?: Record<string, string>;
+  avatars?: Record<string, string>;
+  roles?: Record<string, UserRole>;
+  lastMessage?: string;
+  lastMessageSenderUid?: string;
+  lastMessageSenderUsername?: string;
+  lastMessageTimestamp?: number;
+  lastMessageStatus?: MessageDeliveryStatus;
+  unreadCounts?: Record<string, number>;
+  lastReadTimestamps?: Record<string, number>;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface ChatReplyInfo {
   messageId: string;
   senderUid: string;
@@ -363,6 +412,8 @@ export interface ChatMessage {
   expiresAt?: number;
   replyTo?: ChatReplyInfo | null;
   isPinned?: boolean;
+  status?: MessageDeliveryStatus;
+  read?: boolean;
 }
 
 export interface ReportItem {
@@ -506,6 +557,7 @@ export interface WarsGang {
   createdAt: number;
   status: 'active' | 'recruiting' | 'archived';
   bio?: string;
+  maxMembers?: number; // Maximum member capacity (default 10)
   stats?: {
     wins: number;
     losses: number;
@@ -545,6 +597,32 @@ export interface GangInvitation {
   receiverUsername: string;
   status: 'pending' | 'accepted' | 'declined';
   createdAt: number;
+}
+
+export interface GangApplication {
+  id: string;
+  gangId: string;
+  gangName: string;
+  gangTag?: string;
+  gangIcon?: string;
+  gameType: WarsCategory;
+  applicantUid: string;
+  applicantUsername: string;
+  applicantDisplayName?: string;
+  applicantAvatar?: string;
+  leaderUid: string;
+  status: 'pending' | 'approved' | 'rejected';
+  message?: string;
+  createdAt: number;
+}
+
+export interface GangMembershipDoc {
+  uid: string;
+  gangId: string;
+  gangName: string;
+  gameType: WarsCategory;
+  role: 'leader' | 'member';
+  joinedAt: number;
 }
 
 export interface WarsAnnouncement {

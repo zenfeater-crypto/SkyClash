@@ -469,6 +469,7 @@
         "maxPlayers": { "type": "number" },
         "winningAmount": { "type": "string" },
         "entryFee": { "type": "string" },
+        "entryFeeCoins": { "type": "number" },
         "description": { "type": "string" },
         "isPublished": { "type": "boolean" },
         "registeredUserUids": { "type": "array", "items": { "type": "string" } },
@@ -481,7 +482,7 @@
     },
     "tournamentRegistration": {
       "title": "TournamentRegistration",
-      "description": "Official player registration added exclusively by Owner Admin",
+      "description": "Player tournament registration record with entry fee tracking",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -494,6 +495,9 @@
         "registeredAt": { "type": "number" },
         "registeredByAdminUid": { "type": "string" },
         "registeredByUsername": { "type": "string" },
+        "entryFeeCoinsPaid": { "type": "number" },
+        "entryFeeString": { "type": "string" },
+        "feePolicy": { "type": "string", "enum": ["paid", "complimentary_admin", "free"] },
         "notes": { "type": "string" }
       },
       "required": ["tournamentId", "userUid", "appUsername", "displayName", "registeredAt", "registeredByAdminUid"]

@@ -28,6 +28,7 @@ import {
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { Tournament, TournamentCategory } from '../../types';
+import { parseEntryFeeCoins } from '../../lib/tournamentService';
 
 interface AdminTournamentModalProps {
   isOpen: boolean;
@@ -187,6 +188,8 @@ export const AdminTournamentModal: React.FC<AdminTournamentModalProps> = ({
       const adminUid = currentUser?.uid || 'admin';
       const adminUsername = userProfile?.username || 'Strike';
 
+      const parsedCoins = parseEntryFeeCoins(entryFee.trim());
+
       if (tournamentToEdit) {
         // Edit existing tournament
         const docRef = doc(db, 'tournaments', tournamentToEdit.id);
@@ -198,6 +201,7 @@ export const AdminTournamentModal: React.FC<AdminTournamentModalProps> = ({
           maxPlayers: Number(maxPlayers),
           winningAmount: winningAmount.trim(),
           entryFee: entryFee.trim(),
+          entryFeeCoins: parsedCoins,
           description: description.trim(),
           isPublished,
           updatedAt: now,
@@ -222,6 +226,7 @@ export const AdminTournamentModal: React.FC<AdminTournamentModalProps> = ({
           maxPlayers: Number(maxPlayers),
           winningAmount: winningAmount.trim(),
           entryFee: entryFee.trim(),
+          entryFeeCoins: parsedCoins,
           description: description.trim(),
           isPublished,
           registeredUserUids: [],

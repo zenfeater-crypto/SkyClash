@@ -59,7 +59,15 @@ function AppContent() {
   // Private chat target state
   const [privateChatTarget, setPrivateChatTarget] = useState<{
     friendshipId: string;
-    partnerProfile: { uid: string; username: string; name?: string; avatarUrl?: string; role?: UserRole };
+    partnerProfile: { 
+      uid: string; 
+      username: string; 
+      name?: string; 
+      avatarUrl?: string; 
+      profilePhoto?: string;
+      role?: UserRole;
+      membership?: any;
+    };
   } | null>(null);
 
   // Wars Category state (skyblock vs bedwars)
@@ -184,7 +192,15 @@ function AppContent() {
 
   const handleOpenPrivateChat = (
     friendshipId: string,
-    partnerProfile: { uid: string; username: string; name?: string; avatarUrl?: string }
+    partnerProfile: { 
+      uid: string; 
+      username: string; 
+      name?: string; 
+      avatarUrl?: string; 
+      profilePhoto?: string; 
+      role?: UserRole; 
+      membership?: any;
+    }
   ) => {
     setPrivateChatTarget({ friendshipId, partnerProfile });
   };
@@ -312,6 +328,7 @@ function AppContent() {
                     <WorldChatView
                       onOpenAuth={() => setAuthModalOpen(true)}
                       onOpenReportModal={handleOpenReportModal}
+                      onOpenPrivateChat={handleOpenPrivateChat}
                     />
                   )}
 

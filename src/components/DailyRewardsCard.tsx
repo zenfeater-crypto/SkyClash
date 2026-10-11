@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Flame, 
   Gift, 
@@ -10,16 +10,18 @@ import {
   CheckCircle2, 
   AlertCircle, 
   Loader2, 
-  ArrowRight,
   Crown,
-  X
+  X,
+  Hourglass
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { 
   DAILY_REWARDS_SCHEDULE, 
   evaluateStreakStatus, 
   claimDailyReward, 
-  ClaimRewardResult 
+  ClaimRewardResult,
+  syncServerTimeOffset,
+  getTrustedServerTime
 } from '../lib/dailyRewards';
 import { CircularProfileAvatar } from './CircularProfileAvatar';
 import { MessageTextFrame } from './MessageTextFrame';
@@ -34,7 +36,26 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
   const [claimError, setClaimError] = useState<string | null>(null);
   const [celebrationResult, setCelebrationResult] = useState<ClaimRewardResult | null>(null);
 
-  const status = evaluateStreakStatus(userProfile);
+  // Live timer tick state updated every 1 second based on trusted server time
+  const [nowTime, setNowTime] = useState<number>(() => getTrustedServerTime());
+
+  useEffect(() => {
+    // Initial sync of server clock offset
+    syncServerTimeOffset().then(() => {
+      setNowTime(getTrustedServerTime());
+    });
+
+    // Tick every 1000ms for live, responsive HH:MM:SS countdown
+    const timer = setInterval(() => {
+      setNowTime(getTrustedServerTime());
+    }, 1000);
+
+    // Guaranteed unmount cleanup with zero database writes
+    return () => clearInterval(timer);
+  }, []);
+
+  // Recalculates dynamically every second using trusted server time
+  const status = evaluateStreakStatus(userProfile, nowTime);
 
   const handleClaim = async () => {
     if (!currentUser || !userProfile) {
@@ -50,6 +71,8 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
 
     if (result.success) {
       setCelebrationResult(result);
+      // Immediately refresh the live tick so the next 24-hour countdown starts without delay
+      setNowTime(getTrustedServerTime());
     } else {
       setClaimError(result.error || 'Failed to claim reward');
     }
@@ -64,7 +87,7 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
       {/* Header section */}
       <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5">
               <Gift className="w-3.5 h-3.5 text-amber-400" /> DAILY REWARDS
             </span>
@@ -72,6 +95,21 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
               <Flame className="w-3.5 h-3.5 text-orange-400 animate-pulse" />
               {status.currentStreak} DAY STREAK
             </span>
+
+            {/* Live 24-Hour Countdown Pill (when cooldown is active) */}
+            {status.isClaimedToday && (
+              <span className="px-2.5 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[11px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                <span>NEXT IN: {status.timeRemainingFormatted}</span>
+              </span>
+            )}
+
+            {/* Streak Broken Alert */}
+            {status.isStreakBroken && (
+              <span className="px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-mono font-bold uppercase">
+                Streak Reset
+              </span>
+            )}
           </div>
 
           <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2">
@@ -93,7 +131,9 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
             {status.rewardCycleDay === 7 ? <Crown className="w-5 h-5 text-amber-300 animate-bounce" /> : <Coins className="w-5 h-5" />}
           </div>
           <div>
-            <div className="text-[10px] uppercase font-mono text-slate-400">Today's Reward</div>
+            <div className="text-[10px] uppercase font-mono text-slate-400">
+              {status.isClaimedToday ? 'Upcoming Reward' : "Today's Reward"}
+            </div>
             <div className="text-sm font-black text-amber-300 font-mono">
               {status.rewardCycleDay === 7 ? 'SPECIAL REWARD' : `+${status.nextReward.coins} Coins`}
             </div>
@@ -105,10 +145,9 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 mb-6">
         {DAILY_REWARDS_SCHEDULE.map((tier) => {
           const isClaimedInCurrentCycle = status.isClaimedToday
-            ? tier.day <= status.rewardCycleDay
+            ? tier.day <= status.daysClaimedInCycle
             : tier.day < status.rewardCycleDay;
           const isToday = tier.day === status.rewardCycleDay;
-          const isLocked = !isClaimedInCurrentCycle && !isToday;
           const isDay7 = tier.day === 7;
 
           return (
@@ -133,13 +172,19 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
                 </span>
 
                 {isClaimedInCurrentCycle ? (
-                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold">
+                  <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px] font-bold" title="Claimed in this cycle">
                     <Check className="w-3 h-3 stroke-[3]" />
                   </span>
                 ) : isToday ? (
-                  <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-black font-mono animate-pulse">
-                    TODAY
-                  </span>
+                  status.isClaimedToday ? (
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-[10px]" title={`Unlocks in ${status.timeRemainingFormatted}`}>
+                      <Hourglass className="w-2.5 h-2.5 animate-pulse" />
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[9px] font-black font-mono animate-pulse">
+                      READY
+                    </span>
+                  )
                 ) : (
                   <span className="w-5 h-5 rounded-full bg-slate-900 text-slate-600 flex items-center justify-center text-[10px]">
                     <Lock className="w-2.5 h-2.5" />
@@ -184,7 +229,11 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
                 {isClaimedInCurrentCycle ? (
                   <span className="text-emerald-400 font-bold">Claimed</span>
                 ) : isToday ? (
-                  <span className="text-amber-400 font-bold">Ready</span>
+                  status.isClaimedToday ? (
+                    <span className="text-cyan-400 font-bold tracking-tight">{status.timeRemainingFormatted}</span>
+                  ) : (
+                    <span className="text-amber-400 font-bold">Ready</span>
+                  )
                 ) : (
                   <span className="text-slate-600">Locked</span>
                 )}
@@ -197,13 +246,19 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
       {/* Claim Action Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
         <div className="text-xs text-slate-400 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-slate-500" />
+          <Clock className="w-4 h-4 text-slate-500 shrink-0" />
           <span>
             {status.isClaimedToday ? (
-              <strong className="text-emerald-400">Claimed for today! Next reward unlocks at 00:00 UTC.</strong>
+              <span className="text-slate-300 flex items-center gap-1.5 flex-wrap">
+                <span>Next reward unlocks in</span>
+                <strong className="font-mono text-cyan-300 font-bold text-sm bg-slate-950 px-2 py-0.5 rounded-lg border border-cyan-500/30">
+                  {status.timeRemainingFormatted}
+                </strong>
+                <span className="text-slate-400 text-[11px]">(24-hour cooldown active)</span>
+              </span>
             ) : status.canClaim ? (
               <span className="text-slate-300">
-                You have an unclaimed reward ready! Day {status.rewardCycleDay}: <strong>{status.nextReward.label}</strong>
+                You have an unclaimed reward ready! Day {status.rewardCycleDay}: <strong className="text-amber-300">{status.nextReward.label}</strong>
               </span>
             ) : (
               <span>Sign in to save streak and collect daily coins!</span>
@@ -215,24 +270,28 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
           {!currentUser ? (
             <button
               onClick={onOpenAuth}
-              className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition flex items-center justify-center gap-2"
+              className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/20 active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
               <span>Log In to Claim</span>
             </button>
           ) : status.isClaimedToday ? (
+            /* Cooldown Active: Button disabled showing live remaining countdown */
             <button
               disabled
-              className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-slate-900 border border-slate-800 text-emerald-400 font-bold text-xs flex items-center justify-center gap-2 opacity-80 cursor-not-allowed"
+              className="w-full sm:w-auto py-2.5 px-6 rounded-2xl bg-slate-900 border border-slate-800 text-slate-400 font-bold text-xs flex items-center justify-center gap-2 opacity-90 cursor-not-allowed select-none shadow-inner"
+              title={`Next reward unlocks in ${status.timeRemainingFormatted}`}
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <span>Claimed Today (Come back tomorrow)</span>
+              <Clock className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span>Next Reward in</span>
+              <span className="font-mono text-cyan-300 font-black text-xs">{status.timeRemainingFormatted}</span>
             </button>
           ) : (
+            /* Eligible to Claim: Button is active */
             <button
               onClick={handleClaim}
               disabled={claiming}
-              className={`w-full sm:w-auto py-3 px-8 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition flex items-center justify-center gap-2 ${
+              className={`w-full sm:w-auto py-3 px-8 rounded-2xl font-black text-xs shadow-xl active:scale-95 transition flex items-center justify-center gap-2 cursor-pointer ${
                 status.rewardCycleDay === 7
                   ? 'bg-gradient-to-r from-amber-400 via-orange-500 to-purple-600 hover:from-amber-300 hover:to-purple-500 text-slate-950 shadow-amber-500/30 animate-pulse'
                   : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-amber-500/25'
@@ -272,7 +331,7 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
             {/* Close */}
             <button
               onClick={() => setCelebrationResult(null)}
-              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="absolute top-4 right-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -345,12 +404,15 @@ export const DailyRewardsCard: React.FC<DailyRewardsCardProps> = ({ onOpenAuth }
                 <div className="text-xs text-slate-400 mt-1 font-mono">
                   Current Streak: <strong className="text-orange-400">{celebrationResult.newStreak} Days</strong>
                 </div>
+                <div className="text-xs text-slate-400 mt-0.5 font-mono">
+                  New Balance: <strong className="text-white">{(celebrationResult.newBalance || 0).toLocaleString()} Coins</strong>
+                </div>
               </div>
             )}
 
             <button
               onClick={() => setCelebrationResult(null)}
-              className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition"
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition cursor-pointer"
             >
               Continue Trading
             </button>

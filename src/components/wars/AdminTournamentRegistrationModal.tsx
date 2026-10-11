@@ -37,6 +37,10 @@ import { RoleBadge } from '../RoleBadge';
 import { MembershipBadge } from '../MembershipBadge';
 import { formatTimeAgo } from '../../lib/formatters';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
+import { 
+  getTournamentEntryFeeCoins, 
+  adminRegisterPlayerWithCoins 
+} from '../../lib/tournamentService';
 
 interface AdminTournamentRegistrationModalProps {
   isOpen: boolean;
@@ -64,6 +68,8 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
   // Registering action state
+  const [chargePlayerFee, setChargePlayerFee] = useState(false);
+  const entryFeeCoins = getTournamentEntryFeeCoins(tournament);
   const [isRegistering, setIsRegistering] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
@@ -174,6 +180,11 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
       return;
     }
 
+    if (!currentUser || !userProfile) {
+      setActionError('Admin user session is not available.');
+      return;
+    }
+
     // 1. Prevent duplicate registrations
     const alreadyRegistered = registrations.some(
       (r) => r.userUid === selectedUser.uid || r.appUsername?.toLowerCase() === selectedUser.username?.toLowerCase()
@@ -195,37 +206,19 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
     setActionSuccess(null);
 
     try {
-      const regId = `${tournament.id}_${selectedUser.uid}`;
-      const regDocRef = doc(db, 'tournament_registrations', regId);
+      const res = await adminRegisterPlayerWithCoins(
+        tournament.id,
+        selectedUser,
+        currentUser,
+        userProfile,
+        { chargePlayerFee: chargePlayerFee && entryFeeCoins > 0 }
+      );
 
-      const newRegistration: TournamentRegistration = {
-        id: regId,
-        tournamentId: tournament.id,
-        tournamentName: tournament.name,
-        userUid: selectedUser.uid,
-        appUsername: selectedUser.username || 'unknown',
-        displayName: selectedUser.name || selectedUser.username || 'Player',
-        avatarUrl: selectedUser.profilePhoto || selectedUser.avatarUrl,
-        profilePhoto: selectedUser.profilePhoto || selectedUser.avatarUrl,
-        role: selectedUser.role || 'user',
-        membership: selectedUser.membership || null,
-        profileFrameId: selectedUser.profileFrameId || null,
-        textFrameId: selectedUser.textFrameId || null,
-        registeredAt: Date.now(),
-        registeredByAdminUid: currentUser?.uid || 'admin',
-        registeredByUsername: userProfile?.username || 'Strike',
-      };
-
-      // Save registration document
-      await setDoc(regDocRef, newRegistration);
-
-      // Update tournament counts and registeredUserUids array
-      const tourneyRef = doc(db, 'tournaments', tournament.id);
-      await updateDoc(tourneyRef, {
-        registeredCount: increment(1),
-        registeredUserUids: arrayUnion(selectedUser.uid),
-        updatedAt: Date.now(),
-      });
+      if (!res.success) {
+        setActionError(res.error || 'Failed to register player.');
+        setIsRegistering(false);
+        return;
+      }
 
       // Update parent callback if provided
       if (onTournamentUpdated) {
@@ -236,10 +229,15 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
         });
       }
 
-      setActionSuccess(`Player @${selectedUser.username} successfully registered for ${tournament.name}!`);
+      const feeNotice = res.coinsDeducted > 0
+        ? ` (${res.coinsDeducted.toLocaleString()} coins deducted)`
+        : ' (Complimentary Admin Pass)';
+
+      setActionSuccess(`Player @${selectedUser.username} successfully registered for ${tournament.name}!${feeNotice}`);
       setSelectedUser(null);
       setSearchUsername('');
       setSearchResults([]);
+      setChargePlayerFee(false);
     } catch (err: any) {
       console.error('Error registering player:', err);
       setActionError(err.message || 'Failed to register player. Please check permissions.');
@@ -472,67 +470,132 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
             )}
 
             {/* Selected User Confirmation Card */}
-            {selectedUser && (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <CircularProfileAvatar
-                    src={selectedUser.profilePhoto || selectedUser.avatarUrl}
-                    alt={selectedUser.name || selectedUser.username || 'User'}
-                    size="md"
-                    role={selectedUser.role}
-                  />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-white">
-                        {selectedUser.name || selectedUser.username}
-                      </span>
-                      <span className="text-xs text-amber-300 font-mono font-bold">
-                        @{selectedUser.username}
-                      </span>
+            {selectedUser && (() => {
+              const playerCoins = typeof selectedUser.coinBalance === 'number' ? selectedUser.coinBalance : 0;
+              const hasEnoughCoins = playerCoins >= entryFeeCoins;
+              return (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <CircularProfileAvatar
+                        src={selectedUser.profilePhoto || selectedUser.avatarUrl}
+                        alt={selectedUser.name || selectedUser.username || 'User'}
+                        size="md"
+                        role={selectedUser.role}
+                      />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-white">
+                            {selectedUser.name || selectedUser.username}
+                          </span>
+                          <span className="text-xs text-amber-300 font-mono font-bold">
+                            @{selectedUser.username}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {selectedUser.role && <RoleBadge role={selectedUser.role} size="sm" />}
+                          {selectedUser.membership && (
+                            <MembershipBadge
+                              level={typeof selectedUser.membership === 'object' ? selectedUser.membership.level : selectedUser.membership}
+                              size="sm"
+                            />
+                          )}
+                          <span className="text-[11px] font-mono text-slate-300 flex items-center gap-1">
+                            <Coins className="w-3 h-3 text-amber-400" />
+                            <span>Balance: <strong>{playerCoins.toLocaleString()} coins</strong></span>
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      {selectedUser.role && <RoleBadge role={selectedUser.role} size="sm" />}
-                      {selectedUser.membership && (
-                        <MembershipBadge
-                          level={typeof selectedUser.membership === 'object' ? selectedUser.membership.level : selectedUser.membership}
-                          size="sm"
+
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUser(null)}
+                        disabled={isRegistering}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition"
+                      >
+                        Change
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRegisterPlayer}
+                        disabled={isRegistering || isFull || (chargePlayerFee && !hasEnoughCoins)}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 flex items-center gap-2 transition disabled:opacity-50"
+                      >
+                        {isRegistering ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Registering...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-4 h-4" />
+                            <span>Confirm Registration</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Explicit Fee Deduction Choice (Never silently deduct coins) */}
+                  <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
+                    <div className="font-mono font-bold text-slate-300 text-[11px] uppercase tracking-wider flex items-center justify-between">
+                      <span>Registration Fee Policy</span>
+                      <span className="text-amber-400 font-mono">Tournament Fee: {entryFeeCoins.toLocaleString()} Coins</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className={`p-2.5 rounded-lg border cursor-pointer flex items-start gap-2.5 transition ${
+                        !chargePlayerFee 
+                          ? 'bg-amber-500/15 border-amber-500/50 text-white' 
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminFeePolicy"
+                          checked={!chargePlayerFee}
+                          onChange={() => setChargePlayerFee(false)}
+                          className="mt-0.5 text-amber-500 focus:ring-0"
                         />
-                      )}
+                        <div>
+                          <div className="font-bold text-xs text-white">Complimentary Admin Pass</div>
+                          <div className="text-[10px] text-slate-400">0 coins deducted from player</div>
+                        </div>
+                      </label>
+
+                      <label className={`p-2.5 rounded-lg border flex items-start gap-2.5 transition ${
+                        entryFeeCoins === 0 || !hasEnoughCoins
+                          ? 'opacity-50 cursor-not-allowed bg-slate-950 border-slate-800 text-slate-500'
+                          : chargePlayerFee
+                          ? 'bg-amber-500/15 border-amber-500/50 text-white cursor-pointer'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 cursor-pointer'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="adminFeePolicy"
+                          checked={chargePlayerFee}
+                          disabled={entryFeeCoins === 0 || !hasEnoughCoins}
+                          onChange={() => setChargePlayerFee(true)}
+                          className="mt-0.5 text-amber-500 focus:ring-0"
+                        />
+                        <div>
+                          <div className="font-bold text-xs text-white">
+                            Deduct Fee ({entryFeeCoins.toLocaleString()} Coins)
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {hasEnoughCoins 
+                              ? `Remaining balance: ${(playerCoins - entryFeeCoins).toLocaleString()} coins`
+                              : 'Insufficient balance to deduct'}
+                          </div>
+                        </div>
+                      </label>
                     </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedUser(null)}
-                    disabled={isRegistering}
-                    className="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 transition"
-                  >
-                    Change
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleRegisterPlayer}
-                    disabled={isRegistering || isFull}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/20 flex items-center gap-2 transition disabled:opacity-50"
-                  >
-                    {isRegistering ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Registering...</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" />
-                        <span>Confirm Registration</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Section 2: Official Registered Roster (List of Registrations) */}
@@ -590,10 +653,20 @@ export const AdminTournamentRegistrationModal: React.FC<AdminTournamentRegistrat
                             @{reg.appUsername}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                        <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
                           <span>Registered {formatTimeAgo(reg.registeredAt)}</span>
                           <span>·</span>
                           <span>By @{reg.registeredByUsername || 'Strike'}</span>
+                          <span>·</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                            reg.feePolicy === 'paid' || (reg.entryFeeCoinsPaid && reg.entryFeeCoinsPaid > 0)
+                              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                          }`}>
+                            {reg.feePolicy === 'paid' || (reg.entryFeeCoinsPaid && reg.entryFeeCoinsPaid > 0)
+                              ? `Paid (${reg.entryFeeCoinsPaid} Coins)`
+                              : 'Complimentary Pass'}
+                          </span>
                         </div>
                       </div>
                     </div>

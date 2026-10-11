@@ -5,7 +5,20 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        name: 'trusted-server-time',
+        configureServer(server) {
+          server.middlewares.use('/api/time', (req, res) => {
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+            res.end(JSON.stringify({ serverTime: Date.now() }));
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

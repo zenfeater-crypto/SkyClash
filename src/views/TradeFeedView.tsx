@@ -55,6 +55,7 @@ import { CircularProfileAvatar } from '../components/CircularProfileAvatar';
 import { stripSpoofedRoleTags } from '../lib/validation';
 import { UserProfileModal } from '../components/UserProfileModal';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { useTradeCooldown } from '../lib/tradeCooldown';
 
 function formatTradeExpiry(expiresAt?: number, createdAt?: number): string {
   const expiry = expiresAt || (createdAt ? createdAt + 24 * 60 * 60 * 1000 : 0);
@@ -86,6 +87,10 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
   onNavigateToSettings,
 }) => {
   const { currentUser, userProfile, isAdmin, isOfficer, canDeleteChats } = useAuth();
+  const { isOnCooldown, formattedRemaining } = useTradeCooldown(
+    currentUser?.uid,
+    userProfile?.lastTradePostAt
+  );
   const { items } = useItems();
   const { pets } = usePets();
   const { isFavorite, toggleFavorite } = useUserData();
@@ -509,13 +514,35 @@ export const TradeFeedView: React.FC<TradeFeedViewProps> = ({
           </p>
         </div>
 
-        <button
-          onClick={onOpenCalculator}
-          className="relative z-10 py-3 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 active:scale-95 transition shrink-0"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>Post My Trade</span>
-        </button>
+        <div className="relative z-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+          {isOnCooldown && (
+            <div className="px-3 py-2 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs flex items-center justify-center gap-1.5 shadow-sm">
+              <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+              <span>Cooldown: <strong>{formattedRemaining}</strong></span>
+            </div>
+          )}
+
+          <button
+            onClick={onOpenCalculator}
+            className={`py-3 px-5 rounded-2xl font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 transition shrink-0 ${
+              isOnCooldown
+                ? 'bg-slate-800/80 border border-amber-500/30 text-amber-300 hover:bg-slate-800'
+                : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-lg shadow-cyan-500/25 active:scale-95'
+            }`}
+          >
+            {isOnCooldown ? (
+              <>
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span>Next trade post in {formattedRemaining}</span>
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Post My Trade</span>
+              </>
+            )}
+          </button>
+        </div>
 
         {/* Ambient glow decoration */}
         <div className="absolute right-0 top-0 w-72 h-72 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-transparent rounded-full blur-3xl pointer-events-none" />

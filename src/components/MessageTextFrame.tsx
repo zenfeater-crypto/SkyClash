@@ -97,18 +97,18 @@ export const MessageTextFrame: React.FC<MessageTextFrameProps> = ({
     );
   }
 
-  // 3. OVERLORD (Premium) — EXACT Diamond/Shiny Rectangular Message Frame
+  // 3. OVERLORD (Premium) — EXACT Silver Metallic Rectangular Message Frame
   if (isOverlord) {
     return (
       <div 
-        className={`relative max-w-full rounded-xl overflow-hidden p-[2px] transition-all shadow-[0_0_16px_rgba(34,211,238,0.35)] select-text ${className}`}
+        className={`relative max-w-full rounded-xl overflow-hidden p-[2px] transition-all shadow-[0_0_16px_rgba(226,232,240,0.35)] select-text ${className}`}
         style={{
           backgroundImage: `url(${frameAssets.overlord.messageFrame})`,
           backgroundSize: '100% 100%',
           backgroundRepeat: 'no-repeat',
         }}
       >
-        <div className="relative z-10 px-5 py-3 text-xs sm:text-sm font-medium text-cyan-100 leading-relaxed break-words">
+        <div className="relative z-10 px-5 py-3 text-xs sm:text-sm font-medium text-slate-100 leading-relaxed break-words">
           {content}
         </div>
       </div>

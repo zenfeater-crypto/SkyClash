@@ -32,7 +32,9 @@ import {
   ExternalLink,
   Key,
   Check,
-  Trophy
+  Trophy,
+  Copy,
+  Globe
 } from 'lucide-react';
 import { 
   collection, 
@@ -48,7 +50,7 @@ import {
   where,
   addDoc 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, projectId } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useItems } from '../context/ItemsContext';
 import { 
@@ -136,6 +138,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
     targetLevel: null,
     action: 'grant_premium_lite',
   });
+  const [domainCopied, setDomainCopied] = useState(false);
   const [savingMembership, setSavingMembership] = useState(false);
   const [frameAssetsState, setLocalFrameAssetsState] = useState(getFrameAssets());
   const [showFrameConfig, setShowFrameConfig] = useState(false);
@@ -1329,6 +1332,89 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
             </div>
           </div>
 
+          {/* Owner/Admin Firebase & Authorized Domains Configuration Card */}
+          <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase font-mono flex items-center gap-2">
+                    Firebase Authentication & Authorized Domains
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Production & preview origin configuration for Google OAuth sign-in
+                  </p>
+                </div>
+              </div>
+              <a
+                href={`https://console.firebase.google.com/project/${projectId || 'helical-shoreline-xcb1c'}/authentication/settings`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-semibold text-xs border border-cyan-500/30 transition"
+              >
+                <span>Open Firebase Settings</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
+                <span className="text-[11px] text-slate-400 uppercase font-mono font-semibold">Active Firebase Project</span>
+                <div className="font-mono text-cyan-300 font-bold select-all">{projectId || 'helical-shoreline-xcb1c'}</div>
+                <div className="text-[11px] text-slate-400">Database: ai-studio-yoo-ba560cfe-1367-4499-a81c-231fcacc571c</div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 space-y-1.5">
+                <span className="text-[11px] text-slate-400 uppercase font-mono font-semibold">Current App Hostname</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-emerald-300 font-bold truncate select-all">
+                    {typeof window !== 'undefined' ? window.location.hostname : 'localhost'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && navigator?.clipboard) {
+                        navigator.clipboard.writeText(window.location.hostname).then(() => {
+                          setDomainCopied(true);
+                          setTimeout(() => setDomainCopied(false), 2500);
+                        }).catch(() => {});
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-emerald-100 font-mono text-[11px] transition cursor-pointer"
+                  >
+                    {domainCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copy Hostname</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-400">Add to Authorized domains in Firebase to enable Google popup/redirect flows</div>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/60 text-[11px] text-slate-400 space-y-1">
+              <span className="text-slate-300 font-semibold">How to authorize:</span>
+              <p>
+                1. Click <strong className="text-cyan-300">Open Firebase Settings</strong> above (or navigate to Authentication &rarr; Settings &rarr; Authorized domains).
+              </p>
+              <p>
+                2. Click <strong className="text-white">Add domain</strong> and paste the copied hostname. Both preview URLs and custom domains must be added.
+              </p>
+              <p className="text-slate-400">
+                Notice: Technical domain guidance is placed exclusively in this Owner/Admin panel to keep the public user login screen clean and intuitive.
+              </p>
+            </div>
+          </div>
+
           {/* Recent Moderation Activity Preview */}
           <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
@@ -1757,7 +1843,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                 <span>Membership & Badges Management</span>
               </h2>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                Assign and manage exclusive membership tiers: <strong className="text-amber-400">VANGUARD (Premium Lite)</strong>, <strong className="text-cyan-300">OVERLORD (Premium)</strong>, and <strong className="text-purple-300">SUPREME (VIP Members)</strong>. Changes apply immediately in real-time.
+                Assign and manage exclusive membership tiers: <strong className="text-amber-400">VANGUARD (Premium Lite)</strong>, <strong className="text-slate-200">OVERLORD (Premium)</strong>, and <strong className="text-purple-300">SUPREME (VIP Members)</strong>. Changes apply immediately in real-time.
               </p>
             </div>
 
@@ -1879,13 +1965,13 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
               </div>
 
               {/* 3. OVERLORD (Premium) */}
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/30 via-slate-950 to-slate-900 border border-cyan-500/40 space-y-3 shadow-lg">
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-slate-400/40 space-y-3 shadow-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <MembershipBadge level="premium" title="OVERLORD" size="xs" />
                     <span className="text-xs font-bold text-white">Premium Tier</span>
                   </div>
-                  <span className="text-[10px] text-cyan-300 font-mono">Diamond Shine</span>
+                  <span className="text-[10px] text-slate-300 font-mono">Silver Metallic</span>
                 </div>
 
                 <div className="flex items-center gap-4 pt-1">
@@ -1895,14 +1981,14 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                       membership="premium"
                       size="xl"
                     />
-                    <span className="text-[10px] text-cyan-400 font-mono mt-2">Diamond Frame</span>
+                    <span className="text-[10px] text-slate-300 font-mono mt-2">Silver Frame</span>
                   </div>
 
                   <div className="flex-1 space-y-1 min-w-0">
                     <span className="text-[10px] text-slate-400 font-mono block">Text Message Frame:</span>
                     <MessageTextFrame
                       membershipLevel="premium"
-                      text="OVERLORD: Diamond metallic circular frame and shiny message styling."
+                      text="OVERLORD: Silver metallic circular frame and gleaming silver message styling."
                     />
                   </div>
                 </div>
@@ -2199,7 +2285,7 @@ export const AdminPanelView: React.FC<AdminPanelViewProps> = ({ onBack }) => {
                               <button
                                 type="button"
                                 onClick={() => handleOpenMembershipModal(user, 'premium', 'grant_premium')}
-                                className="px-2.5 py-1 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 font-mono text-[10px] font-bold border border-cyan-500/30 transition cursor-pointer"
+                                className="px-2.5 py-1 rounded-lg bg-slate-700/30 hover:bg-slate-700/50 text-slate-200 font-mono text-[10px] font-bold border border-slate-400/40 transition cursor-pointer"
                                 title="Grant OVERLORD (Premium)"
                               >
                                 + OVERLORD

@@ -24,10 +24,12 @@ import {
   HelpCircle,
   Lock,
   Zap,
-  Tag
+  Tag,
+  Clock
 } from 'lucide-react';
-import { collection, addDoc } from 'firebase/firestore';
+import { collection } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { useTradeCooldown, createTradePostWithCooldownTransaction } from '../lib/tradeCooldown';
 import { useItems } from '../context/ItemsContext';
 import { usePets } from '../context/PetsContext';
 import { useUserData } from '../context/UserDataContext';
@@ -62,6 +64,14 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
   const { pets, refreshPets } = usePets();
   const { saveTrade } = useUserData();
   const { currentUser, userProfile } = useAuth();
+
+  // Strict 7-minute (420-second) trade post cooldown
+  const {
+    isOnCooldown,
+    remainingSeconds,
+    formattedRemaining,
+    cooldownMessage,
+  } = useTradeCooldown(currentUser?.uid, userProfile?.lastTradePostAt);
 
   // Value refresh state
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -355,6 +365,11 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
       return;
     }
 
+    if (isOnCooldown) {
+      setPublishError(cooldownMessage || `Next trade post available in ${formattedRemaining}`);
+      return;
+    }
+
     if (yourOffer.length === 0 && theirOffer.length === 0) {
       alert('Please add at least one item to either Your Offer or My Offer before posting.');
       return;
@@ -367,6 +382,11 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
   // Publish to Trade Feed
   const handlePublishTradePost = async () => {
     if (!currentUser || isPublishing) return;
+
+    if (isOnCooldown) {
+      setPublishError(cooldownMessage || `Next trade post available in ${formattedRemaining}`);
+      return;
+    }
 
     if (yourOffer.length === 0 && theirOffer.length === 0) {
       setPublishError('At least one item is required in either offer.');
@@ -430,7 +450,10 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
         isLookingFor: selectedTags.includes('looking_for'),
       };
 
-      await addDoc(collection(db, 'trade_posts'), sanitizeForFirestore(tradePostData));
+      await createTradePostWithCooldownTransaction({
+        tradePostData,
+        currentUserUid: currentUser.uid,
+      });
 
       // Also record in user trade history
       await saveTrade({
@@ -1008,14 +1031,40 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
       {/* ============================================================ */}
       {/* 4. POST MY TRADE (Section 9)                                 */}
       {/* ============================================================ */}
-      <div className="pt-2">
+      <div className="pt-2 space-y-2">
+        {currentUser && isOnCooldown && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 flex items-center justify-between text-xs sm:text-sm shadow-md animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-amber-300 font-medium">
+              <Clock className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+              <span>Next trade post available in <strong className="font-mono font-black text-amber-200 text-sm">{formattedRemaining}</strong></span>
+            </div>
+            <div className="font-mono font-black px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs tracking-wider">
+              {formattedRemaining}
+            </div>
+          </div>
+        )}
+
         {currentUser ? (
           <button
             onClick={handleOpenPreview}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-extrabold text-base tracking-wide flex items-center justify-center gap-2.5 shadow-xl shadow-cyan-500/25 active:scale-98 transition"
+            disabled={isOnCooldown}
+            className={`w-full py-4 px-6 rounded-2xl font-extrabold text-base tracking-wide flex items-center justify-center gap-2.5 transition ${
+              isOnCooldown
+                ? 'bg-slate-800/80 border border-amber-500/25 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white shadow-xl shadow-cyan-500/25 active:scale-98'
+            }`}
           >
-            <Send className="w-5 h-5" />
-            <span>POST MY TRADE</span>
+            {isOnCooldown ? (
+              <>
+                <Clock className="w-5 h-5 text-amber-400" />
+                <span>Next trade post available in {formattedRemaining}</span>
+              </>
+            ) : (
+              <>
+                <Send className="w-5 h-5" />
+                <span>POST MY TRADE</span>
+              </>
+            )}
           </button>
         ) : (
           <button
@@ -1235,6 +1284,18 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
               </div>
             </div>
 
+            {isOnCooldown && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-amber-300 text-xs shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-400 animate-pulse shrink-0" />
+                  <span>Next trade post available in <strong className="font-mono font-bold text-amber-200">{formattedRemaining}</strong></span>
+                </div>
+                <span className="font-mono font-black px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px]">
+                  {formattedRemaining}
+                </span>
+              </div>
+            )}
+
             {/* Buttons: Edit Trade & Post My Trade */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
@@ -1247,13 +1308,18 @@ export const TradeCalculatorView: React.FC<TradeCalculatorViewProps> = ({
 
               <button
                 onClick={handlePublishTradePost}
-                disabled={isPublishing}
-                className="py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/25 flex items-center justify-center gap-1.5 transition disabled:opacity-50"
+                disabled={isPublishing || isOnCooldown}
+                className="py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-md shadow-cyan-500/25 flex items-center justify-center gap-1.5 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isPublishing ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Publishing...</span>
+                  </>
+                ) : isOnCooldown ? (
+                  <>
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>Cooldown ({formattedRemaining})</span>
                   </>
                 ) : (
                   <>

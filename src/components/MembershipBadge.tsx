@@ -56,15 +56,15 @@ export const MembershipBadge: React.FC<MembershipBadgeProps> = ({
     );
   }
 
-  // 2. OVERLORD (Premium) — Diamond-Style Shiny Gold & Metallic Platinum
+  // 2. OVERLORD (Premium) — Polished Metallic Silver & Platinum
   if (isOverlord) {
     return (
       <span
-        title="OVERLORD — Premium Member Tier"
-        className={`inline-flex items-center font-mono font-black uppercase rounded-md border select-none transition-all duration-300 shadow-md ${sizeClasses} bg-gradient-to-r from-amber-950 via-yellow-900/90 to-cyan-950 text-cyan-200 border-amber-400/80 shadow-[0_0_12px_rgba(251,191,36,0.4),0_0_8px_rgba(34,211,238,0.3)] ring-1 ring-cyan-300/50 hover:shadow-[0_0_18px_rgba(251,191,36,0.65)] ${className}`}
+        title="OVERLORD — Premium Member Tier (Silver)"
+        className={`inline-flex items-center font-mono font-black uppercase rounded-md border select-none transition-all duration-300 shadow-md ${sizeClasses} bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-slate-100 border-slate-300/80 shadow-[0_0_12px_rgba(203,213,225,0.45)] ring-1 ring-slate-200/50 hover:shadow-[0_0_18px_rgba(226,232,240,0.7)] ${className}`}
       >
-        {showIcon && <Diamond className={`${iconSizes} text-cyan-300 fill-cyan-300/30 drop-shadow`} />}
-        <span className="bg-gradient-to-r from-amber-200 via-cyan-100 to-amber-300 bg-clip-text text-transparent font-extrabold drop-shadow">
+        {showIcon && <Diamond className={`${iconSizes} text-slate-200 fill-slate-300/30 drop-shadow`} />}
+        <span className="bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent font-extrabold drop-shadow">
           [OVERLORD]
         </span>
       </span>
